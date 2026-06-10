@@ -1,0 +1,7 @@
+node_modules
+.next
+.git
+.vercel
+.env
+npm-debug.log
+# .env.local SÍ se copia: el build de producción hornea las NEXT_PUBLIC_* (públicas)

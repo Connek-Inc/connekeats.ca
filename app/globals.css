@@ -1,26 +1,103 @@
 @import "tailwindcss";
+@import "@heroui/styles";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ════════════════════════════════════════════════════════════════
+   Tema MONOCROMO con soporte claro/oscuro (toggle voluntario).
+   Reescribimos el acento de HeroUI a monocromo en AMBOS temas (no azul).
+   Reglas sin @layer → ganan sobre las de @layer base de HeroUI.
+   ════════════════════════════════════════════════════════════════ */
+:root,
+.light {
+  --accent: oklch(0.18 0 0); /* casi negro = primario en claro */
+  --accent-foreground: oklch(1 0 0);
+  --accent-hover: oklch(0.3 0 0);
+  --accent-soft: color-mix(in oklab, black 8%, transparent);
+  --accent-soft-hover: color-mix(in oklab, black 12%, transparent);
+  --accent-soft-foreground: oklch(0.18 0 0);
+  --focus: oklch(0.18 0 0);
+  --link: var(--foreground);
+  --success: oklch(0.18 0 0);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.45 0 0);
+  --warning-foreground: oklch(1 0 0);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.dark {
+  --background: oklch(0 0 0); /* negro puro */
+  --accent: oklch(1 0 0); /* blanco = primario en oscuro */
+  --accent-foreground: oklch(0 0 0);
+  --accent-hover: oklch(0.86 0 0);
+  --accent-soft: color-mix(in oklab, white 14%, transparent);
+  --accent-soft-hover: color-mix(in oklab, white 22%, transparent);
+  --accent-soft-foreground: oklch(1 0 0);
+  --focus: oklch(1 0 0);
+  --link: var(--foreground);
+  --success: oklch(1 0 0);
+  --success-foreground: oklch(0 0 0);
+  --warning: oklch(0.82 0 0);
+  --warning-foreground: oklch(0 0 0);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html {
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  min-height: 100dvh;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  /* Sensación de app nativa: sin flash gris al tocar, sin rebote del scroll */
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  /* Glow sutil del foreground (adapta al tema, sin color) */
+  background-image:
+    radial-gradient(60rem 40rem at 110% -10%, color-mix(in oklab, var(--foreground) 5%, transparent), transparent 60%),
+    radial-gradient(55rem 32rem at -10% 0%, color-mix(in oklab, var(--foreground) 3%, transparent), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* Safe-areas del iPhone (notch arriba / home indicator abajo). Requiere
+   viewport-fit=cover; en pantallas sin notch env() = 0, así que no estorba. */
+.safe-pt {
+  padding-top: calc(env(safe-area-inset-top) + 0.75rem);
+}
+.safe-pb {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem);
+}
+
+::selection {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes beaconPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.78; }
+}
+.beacon-pulse {
+  animation: beaconPulse 1.1s ease-in-out infinite;
+}
+
+/* Glass adaptable al tema (tinte del foreground) */
+.glass {
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 10%, transparent);
+  backdrop-filter: blur(12px);
+}
+.glass-strong {
+  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 16%, transparent);
 }
