@@ -480,6 +480,19 @@ export function useSetItemStatus(businessId: number) {
   });
 }
 
+// El mesero quita un ítem del pedido (recalcula total en el backend).
+export function useDeleteOrderItem(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, itemId }: { orderId: number; itemId: number }) =>
+      api.del(`/businesses/${businessId}/orders/${orderId}/items/${itemId}`),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["order", businessId, v.orderId] });
+      qc.invalidateQueries({ queryKey: ["orders", businessId] });
+    },
+  });
+}
+
 export function useServiceRequests(businessId: number | null) {
   return useQuery({
     enabled: !!businessId,

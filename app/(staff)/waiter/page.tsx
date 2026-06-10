@@ -12,6 +12,8 @@ import {
   Landmark,
   type LucideIcon,
   RefreshCw,
+  Trash2,
+  Utensils,
   X,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -24,11 +26,13 @@ import {
   useBills,
   useCheckoutTable,
   useCreateStaffOrder,
+  useDeleteOrderItem,
   useMarkBillPaid,
   useMenu,
   useOrderWithItems,
   useOrders,
   useServiceRequests,
+  useSetOrderStatus,
   useTables,
   useUpdateTable,
 } from "@/lib/hooks";
@@ -104,8 +108,11 @@ export default function WaiterPage() {
   const requests = useServiceRequests(businessId);
   const tables = useTables(businessId);
   const bills = useBills(businessId);
+  const orders = useOrders(businessId);
   const ack = useAckRequest(businessId!);
   const markPaid = useMarkBillPaid(businessId!);
+  const setOrderStatus = useSetOrderStatus(businessId!);
+  const { show } = useToast();
   const [selected, setSelected] = useState<number | null>(null);
   const [onlyMyZone, setOnlyMyZone] = useState(true);
   // Zona asignada al mesero (de su rol). El dueño ve todas (no tiene zona).
@@ -141,6 +148,9 @@ export default function WaiterPage() {
   const visibleTables = (tables.data ?? []).filter((t) =>
     onlyMyZone && myFloorId ? t.floor_id === myFloorId : true,
   );
+  // Pedidos LISTOS para servir (la cocina los marcó 'ready'), de las mesas visibles.
+  const visibleIds = new Set(visibleTables.map((t) => t.id));
+  const readyOrders = (orders.data ?? []).filter((o) => o.status === "ready" && visibleIds.has(o.table_id));
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-8">
@@ -196,6 +206,49 @@ export default function WaiterPage() {
           </p>
         )}
       </div>
+
+      {/* ── Listos para servir (la cocina avisa al mesero) ── */}
+      {readyOrders.length > 0 && (
+        <>
+          <p className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wide text-foreground/50">
+            <Utensils className="size-3.5" /> Listos para servir
+          </p>
+          <div className="mb-7 flex flex-col gap-2">
+            {readyOrders.map((o) => {
+              const c = tableColor(o.table_id);
+              return (
+                <Card
+                  key={o.id}
+                  style={{ borderLeftColor: c.hex, borderLeftWidth: 5, borderLeftStyle: "solid" }}
+                  className="flex flex-row items-center justify-between rounded-3xl bg-foreground/[0.07] p-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: c.hex }} />
+                    <p className="font-semibold text-foreground">{tableLabel(o.table_id)}</p>
+                    <span className="text-xs text-foreground/45">pedido #{o.id} listo</span>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    isDisabled={setOrderStatus.isPending}
+                    onPress={() =>
+                      setOrderStatus.mutate(
+                        { orderId: o.id, status: "served" },
+                        {
+                          onError: () => show("No se pudo marcar servido", "error"),
+                          onSuccess: () => show(`${tableLabel(o.table_id)} servida`, "success"),
+                        },
+                      )
+                    }
+                  >
+                    Servir
+                  </Button>
+                </Card>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* ── Salón (mesas) ── */}
       <div className="mb-2 flex items-center justify-between">
@@ -266,6 +319,7 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
   const freeTable = useUpdateTable(businessId);
   const menu = useMenu(businessId);
   const createOrder = useCreateStaffOrder(businessId);
+  const delItem = useDeleteOrderItem(businessId);
   const { show } = useToast();
   const [cart, setCart] = useState<Record<number, number>>({});
   const [tab, setTab] = useState<"resumen" | "pedir">("resumen");
@@ -396,12 +450,29 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
                 <Card className="glass rounded-2xl p-3">
                   {detail.data?.items?.length ? (
                     detail.data.items.map((it) => (
-                      <div key={it.id} className="mb-1 flex justify-between text-sm">
-                        <span className="text-foreground/75">
+                      <div key={it.id} className="mb-1 flex items-center justify-between gap-2 text-sm">
+                        <span className="min-w-0 flex-1 truncate text-foreground/75">
                           {it.qty}× {it.name_snapshot}{" "}
                           <span className="text-foreground/40">({it.status})</span>
                         </span>
                         <span className="text-foreground">${(it.price_snapshot * it.qty).toFixed(2)}</span>
+                        <button
+                          type="button"
+                          aria-label={`Quitar ${it.name_snapshot}`}
+                          className="shrink-0 text-foreground/35 transition hover:text-foreground disabled:opacity-40"
+                          disabled={delItem.isPending}
+                          onClick={() =>
+                            delItem.mutate(
+                              { orderId: activeOrder.id, itemId: it.id },
+                              {
+                                onError: (e) => show(e instanceof Error ? e.message : "No se pudo quitar", "error"),
+                                onSuccess: () => show("Ítem quitado del pedido", "success"),
+                              },
+                            )
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
                       </div>
                     ))
                   ) : (
