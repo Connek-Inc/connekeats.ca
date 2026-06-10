@@ -1,0 +1,6 @@
+# Forzar saltos de línea LF en archivos que corren en Linux (VPS).
+# Evita el clásico error  bash: $'\r': command not found  por CRLF de Windows.
+*.sh        text eol=lf
+Caddyfile   text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
