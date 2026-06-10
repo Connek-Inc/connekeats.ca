@@ -1,9 +1,9 @@
 "use client";
 
 import { Button, Card, Spinner } from "@heroui/react";
-import { Armchair, ChefHat, ConciergeBell, Hand, Receipt, Settings, TrendingUp, Wallet } from "lucide-react";
+import { Armchair, ChefHat, ConciergeBell, Hand, LayoutGrid, QrCode, Receipt, Settings, TrendingUp, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { useAuth } from "@/lib/auth";
 import { useBusiness } from "@/lib/business";
@@ -18,6 +18,7 @@ export default function HomePage() {
   const { businessId, setBusinessId } = useBusiness();
   const businesses = useBusinesses();
   const router = useRouter();
+  const [pickTable, setPickTable] = useState(false); // selector de mesa para "Vista cliente"
 
   useEffect(() => {
     if (!businessId && businesses.data?.length) setBusinessId(businesses.data[0].id);
@@ -103,6 +104,52 @@ export default function HomePage() {
               <Kpi icon={ConciergeBell} label="Pedidos activos" value={String(activeOrders)} loading={orders.isLoading} />
               {canWaiter && (
                 <Kpi icon={Receipt} label="Por cobrar" value={String(pending.length)} sub={money(pendingSum)} loading={bills.isLoading} />
+              )}
+            </section>
+          )}
+
+          {/* ── Acciones rápidas ── */}
+          {active && canWaiter && (
+            <section className="flex flex-col gap-2">
+              <p className="text-xs uppercase tracking-wide text-foreground/50">Acciones rápidas</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => router.push("/waiter")}
+                  className="glass flex flex-col items-start gap-1 rounded-3xl p-4 text-left transition hover:bg-foreground/10"
+                >
+                  <LayoutGrid className="size-6 text-foreground" />
+                  <span className="font-semibold text-foreground">Mesas</span>
+                  <span className="text-xs text-foreground/50">Salón, pedidos y cobro</span>
+                </button>
+                <button
+                  onClick={() => setPickTable((v) => !v)}
+                  className={`glass flex flex-col items-start gap-1 rounded-3xl p-4 text-left transition hover:bg-foreground/10 ${pickTable ? "border-foreground/40 bg-foreground/10" : ""}`}
+                >
+                  <QrCode className="size-6 text-foreground" />
+                  <span className="font-semibold text-foreground">Vista cliente</span>
+                  <span className="text-xs text-foreground/50">Ver el menú QR de una mesa</span>
+                </button>
+              </div>
+              {pickTable && (
+                <Card className="glass flex max-h-60 flex-col gap-0.5 overflow-y-auto rounded-2xl p-2">
+                  {tables.data?.length ? (
+                    tables.data.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => {
+                          window.open(`/t/${t.qr_token}`, "_blank");
+                          setPickTable(false);
+                        }}
+                        className="flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-foreground/80 transition hover:bg-foreground/10"
+                      >
+                        <span className="font-medium text-foreground">{t.label}</span>
+                        <span className="text-xs text-foreground/45">abrir vista cliente →</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-3 py-2 text-sm text-foreground/40">No hay mesas. Créalas en Setup → Mesas.</p>
+                  )}
+                </Card>
               )}
             </section>
           )}

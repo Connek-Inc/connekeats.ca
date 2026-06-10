@@ -2,7 +2,7 @@
 // Experiencia del comensal por QR (web pública, sin login). Opera con el token
 // efímero de mesa contra /diner/*. Construida con HeroUI v3 (dark/glass).
 import { Button, Card, Spinner } from "@heroui/react";
-import { ArrowLeft, Hand, Heart, type LucideIcon, Minus, Play, Plus, Star, Unplug, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minus, Play, Plus, Star, Unplug, UtensilsCrossed } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -31,6 +31,7 @@ export default function DinerTablePage() {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSent, setReviewSent] = useState(false);
+  const [billRequested, setBillRequested] = useState(false);
 
   const dt = session?.token ?? null;
   const color = tableColor(session?.table_id);
@@ -102,6 +103,7 @@ export default function DinerTablePage() {
     if (!dt) return;
     try {
       await api.post("/diner/bill", undefined, dt);
+      setBillRequested(true);
       show("Cuenta solicitada", "success");
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo pedir la cuenta", "error");
@@ -219,6 +221,22 @@ export default function DinerTablePage() {
             <span>${Number(order.total).toFixed(2)}</span>
           </div>
         </Card>
+      ) : null}
+
+      {/* Ir a pagar: el comensal pide la cuenta → el mesero la cobra y emite factura */}
+      {order && order.items?.length ? (
+        billRequested ? (
+          <Card className="glass mb-5 flex items-center gap-2 rounded-3xl p-4 text-foreground">
+            <CheckCircle2 className="size-5 shrink-0" />
+            <span className="text-sm">Cuenta solicitada · el mesero va en camino para cobrarte.</span>
+          </Card>
+        ) : (
+          <Button variant="primary" size="lg" fullWidth className="mb-5" onPress={() => void requestBill()}>
+            <span className="flex items-center justify-center gap-2">
+              <CreditCard className="size-5" /> Ir a pagar · ${Number(order.total).toFixed(2)}
+            </span>
+          </Button>
+        )
       ) : null}
 
       {/* Platillo del día (destacados) */}

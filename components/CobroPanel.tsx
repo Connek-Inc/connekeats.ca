@@ -4,7 +4,7 @@
 //   • Dividir       → pagos parciales: partes iguales (entre N) o por ítem
 //   • Varias mesas  → un cliente paga varias mesas de una (checkout-multi)
 import { Button, Card, Spinner } from "@heroui/react";
-import { Banknote, CreditCard, FileText, Landmark, type LucideIcon, Users } from "lucide-react";
+import { Banknote, CheckCircle2, CreditCard, FileText, Landmark, type LucideIcon, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -58,6 +58,8 @@ export function CobroPanel({
   const { show } = useToast();
   const router = useRouter();
   const [mode, setMode] = useState<"full" | "split" | "multi">("full");
+  // Tras confirmar el pago → estado "pagado" con botón manual "Emitir factura".
+  const [paid, setPaid] = useState<{ billId: number | null; total: number } | null>(null);
 
   const checkout = useCheckoutTable(businessId);
   const openBill = useOpenBill(businessId);
@@ -72,8 +74,7 @@ export function CobroPanel({
     try {
       const r = await checkout.mutateAsync({ tableId, paymentMethod: method, discount: Number(discount) || 0, tip: Number(tip) || 0 });
       show(`Mesa cobrada · ${money(fullTotal)}`, "success");
-      onDone();
-      if (r?.bill_id) router.push(`/factura/${r.bill_id}`);
+      setPaid({ billId: r?.bill_id ?? null, total: fullTotal });
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo cobrar", "error");
     }
@@ -105,7 +106,7 @@ export function CobroPanel({
       setSel(new Set());
       if (r.done) {
         show("Cuenta saldada ✓", "success");
-        onDone();
+        setPaid({ billId, total });
       } else {
         show(`Pago de ${money(amount)} · faltan ${money(r.remaining)}`, "success");
       }
@@ -125,6 +126,32 @@ export function CobroPanel({
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo cobrar", "error");
     }
+  }
+
+  // ── Pago confirmado → emitir factura (manual) ──
+  if (paid) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-2xl bg-foreground/[0.05] p-5 text-center">
+        <CheckCircle2 className="size-10 text-foreground" />
+        <p className="text-lg font-bold text-foreground">Pago confirmado · {money(paid.total)}</p>
+        <p className="text-sm text-foreground/55">¿Emitir la factura de esta mesa?</p>
+        <div className="flex w-full gap-2">
+          <Button
+            variant="primary"
+            className="flex-1"
+            isDisabled={!paid.billId}
+            onPress={() => paid.billId && router.push(`/factura/${paid.billId}`)}
+          >
+            <span className="flex items-center justify-center gap-1.5">
+              <FileText className="size-4" /> Emitir factura
+            </span>
+          </Button>
+          <Button variant="secondary" onPress={onDone}>
+            Listo
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const TabBtn = ({ k, label }: { k: typeof mode; label: string }) => (

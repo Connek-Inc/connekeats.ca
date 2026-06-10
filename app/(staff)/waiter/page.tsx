@@ -188,10 +188,18 @@ export default function WaiterPage() {
                   </div>
                 </button>
                 <div className="flex gap-2">
-                  {r.status === "open" && (
-                    <Button variant="primary" size="sm" onPress={() => ack.mutate({ id: r.id, action: "ack" })}>
-                      Voy
+                  {r.type === "request_bill" ? (
+                    <Button variant="primary" size="sm" onPress={() => setSelected(r.table_id)}>
+                      <span className="flex items-center gap-1.5">
+                        <CreditCard className="size-4" /> Mostrar billing
+                      </span>
                     </Button>
+                  ) : (
+                    r.status === "open" && (
+                      <Button variant="primary" size="sm" onPress={() => ack.mutate({ id: r.id, action: "ack" })}>
+                        Voy
+                      </Button>
+                    )
                   )}
                   <Button variant="secondary" size="sm" onPress={() => ack.mutate({ id: r.id, action: "done" })}>
                     Hecho
@@ -291,10 +299,17 @@ export default function WaiterPage() {
                   </div>
                   <p className="text-foreground/65">${Number(b.total).toFixed(2)} · pedida por {b.requested_by}</p>
                 </div>
-                <PayPicker
-                  pending={markPaid.isPending}
-                  onPay={(m) => markPaid.mutate({ billId: b.id, paymentMethod: m })}
-                />
+                <div className="flex flex-col items-end gap-2">
+                  <Button variant="primary" size="sm" onPress={() => setSelected(b.table_id)}>
+                    <span className="flex items-center gap-1.5">
+                      <CreditCard className="size-4" /> Mostrar billing
+                    </span>
+                  </Button>
+                  <PayPicker
+                    pending={markPaid.isPending}
+                    onPay={(m) => markPaid.mutate({ billId: b.id, paymentMethod: m })}
+                  />
+                </div>
               </Card>
             );
           })
