@@ -19,9 +19,12 @@ import {
   Wallet,
   Zap,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth";
+import { useLocale } from "@/lib/i18n";
+import { PRIVACY } from "@/lib/privacyPolicy";
 
 const FEATURES = [
   { icon: QrCode, title: "Pedidos por QR", desc: "Cada mesa con su código: el comensal ve el menú con fotos y video, y pide desde su teléfono." },
@@ -43,6 +46,7 @@ const MODULES = [
 
 export default function Landing() {
   const { session } = useAuth();
+  const { locale } = useLocale();
   const router = useRouter();
   const enter = () => router.push(session ? "/home" : "/login");
 
@@ -125,10 +129,13 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="safe-pb border-t border-foreground/10 px-5 py-8 text-center text-sm text-foreground/40">
+      <footer className="safe-pb flex flex-col items-center gap-2 border-t border-foreground/10 px-5 py-8 text-center text-sm text-foreground/40">
         <span className="flex items-center justify-center gap-1.5">
           <UtensilsCrossed className="size-4" /> Connek Food · connekeats.ca
         </span>
+        <Link href="/privacy" className="text-xs text-foreground/40 underline transition hover:text-foreground/70">
+          {PRIVACY.link[locale]}
+        </Link>
       </footer>
     </main>
   );

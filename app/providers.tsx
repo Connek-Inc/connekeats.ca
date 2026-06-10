@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 
+import { ConsentBanner } from "@/components/ConsentBanner";
 import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/lib/toast";
@@ -15,7 +16,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <LocaleProvider>
         <QueryClientProvider client={qc}>
           <AuthProvider>
-            <ToastProvider>{children}</ToastProvider>
+            <ToastProvider>
+              {children}
+              <ConsentBanner />
+            </ToastProvider>
           </AuthProvider>
         </QueryClientProvider>
       </LocaleProvider>
