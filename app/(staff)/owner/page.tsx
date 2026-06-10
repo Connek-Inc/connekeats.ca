@@ -757,6 +757,11 @@ function BrandSettings({ business }: { business: Business }) {
     update.mutate({ brand_primary: p, brand_bg: b, brand_fg: f }, { onSuccess: ok("Marca aplicada"), onError: fail });
   };
   const reset = () => {
+    // Limpia también el estado local de los pickers (si no, el preview y
+    // "Aplicar" conservarían los colores viejos y podrían re-aplicarse).
+    setPrimary("#10b981");
+    setBg("#0b1f17");
+    setFg("#ecfdf5");
     setFont("oswald");
     update.mutate(
       { brand_primary: "", brand_bg: "", brand_fg: "", brand_font: "" },

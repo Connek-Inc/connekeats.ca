@@ -74,7 +74,8 @@ export function brandVars(b?: BrandFields | null): Record<string, string> {
 
   if (bg) out["--background"] = bg;
   if (fg) out["--foreground"] = fg;
-  if (bg && fg) out["--surface"] = `color-mix(in oklab, ${fg} 5%, ${bg})`;
+  // Deriva --surface aunque solo haya uno de los dos (usa el otro del tema).
+  if (bg || fg) out["--surface"] = `color-mix(in oklab, ${fg ?? "var(--foreground)"} 5%, ${bg ?? "var(--background)"})`;
 
   if (primary) {
     const onP = readableOn(primary);
