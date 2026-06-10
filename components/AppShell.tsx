@@ -2,12 +2,14 @@
 // Shell del panel admin: sidebar en desktop, menú hamburguesa (drawer) en móvil.
 // Navegación filtrada por ROL (owner/waiter/kitchen) del negocio activo.
 
-import { ConciergeBell, Home, type LucideIcon, Menu, Settings, UtensilsCrossed, X } from "lucide-react";
+import { ConciergeBell, Home, type LucideIcon, Menu, Settings, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Brand } from "@/components/Brand";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth";
+import { BrandStyle } from "@/lib/brand";
 import { useBusiness } from "@/lib/business";
 import { useBusinesses } from "@/lib/hooks";
 import { MODULES } from "@/lib/modules";
@@ -21,17 +23,6 @@ const BASE_TOP: NavItem[] = [
   { href: "/waiter", label: "Mesero", icon: ConciergeBell, roles: ["owner", "manager", "waiter"] },
 ];
 const SETUP_ITEM: NavItem = { href: "/owner", label: "Setup", icon: Settings, roles: ["owner", "manager"] };
-
-function Brand() {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background">
-        <UtensilsCrossed className="size-4" />
-      </div>
-      <span className="text-[15px] font-bold tracking-tight text-foreground">Connek</span>
-    </div>
-  );
-}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { roles, signOut, user } = useAuth();
@@ -118,9 +109,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh lg:flex">
+      {/* Aplica la marca (colores/tipografía) del negocio activo en runtime */}
+      <BrandStyle business={active} />
       {/* Sidebar (desktop) */}
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col gap-5 border-r border-foreground/10 bg-surface/40 p-4 lg:flex">
-        <Brand />
+        <Brand logoUrl={active?.logo_url} name={active?.name} />
         {navList}
         {footer}
       </aside>
@@ -131,7 +124,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button onClick={() => setOpen(true)} aria-label="Abrir menú" className="text-foreground">
             <Menu className="size-6" />
           </button>
-          <Brand />
+          <Brand logoUrl={active?.logo_url} name={active?.name} />
           <ThemeToggle />
         </header>
 
@@ -144,7 +137,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
-                <Brand />
+                <Brand logoUrl={active?.logo_url} name={active?.name} />
                 <button onClick={() => setOpen(false)} aria-label="Cerrar" className="text-foreground/60 hover:text-foreground">
                   <X className="size-5" />
                 </button>

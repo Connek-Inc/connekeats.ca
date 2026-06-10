@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "@/lib/api";
+import { BrandStyle } from "@/lib/brand";
 import { presetFor } from "@/lib/modePresets";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
@@ -140,6 +141,7 @@ export default function DinerTablePage() {
   const usedCatIds = new Set(items.map((it) => it.category_id).filter(Boolean));
   const chipCats = categories.filter((c) => usedCatIds.has(c.id));
   const visibleItems = cat === "all" ? items : items.filter((it) => it.category_id === cat);
+  const featured = items.filter((it) => it.featured);
   const pairings = detail ? items.filter((it) => it.id !== detail.id).slice(0, 8) : [];
   // Secciones del menú: agrupado por categoría cuando se ve "Todo".
   const menuGroups =
@@ -152,8 +154,14 @@ export default function DinerTablePage() {
 
   return (
     <main className="mx-auto w-full max-w-xl px-5 pb-28 pt-8">
+      {/* Marca del negocio (colores + tipografía) aplicada en runtime */}
+      <BrandStyle business={session} />
       {/* Cabecera */}
       <header className="mb-4">
+        {session.logo_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={session.logo_url} alt="" className="mb-2 h-12 w-auto max-w-[170px] rounded-xl object-contain" />
+        )}
         <p className="flex items-center gap-1.5 text-foreground/60">
           <mp.Icon className="size-4" /> {mp.label}
         </p>
@@ -212,6 +220,26 @@ export default function DinerTablePage() {
           </div>
         </Card>
       ) : null}
+
+      {/* Platillo del día (destacados) */}
+      {featured.length > 0 && (
+        <section className="mb-5">
+          <p className="mb-2 flex items-center gap-1.5 text-sm font-bold text-foreground">
+            <Star className="size-4 fill-foreground" /> Del día
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {featured.map((it) => (
+              <ItemCard
+                key={`feat-${it.id}`}
+                it={it}
+                qty={cart[it.id] ?? 0}
+                onOpen={() => setDetail(it)}
+                onAdd={() => add(it.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Menú */}
       <p className="mb-2 text-xs uppercase tracking-wide text-foreground/50">{mp.terms.menu}</p>

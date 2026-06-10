@@ -42,6 +42,13 @@ export type Business = {
   tax_id?: string | null;
   legal_name?: string | null;
   fiscal_address?: string | null;
+  // Marca / white-label
+  logo_url?: string | null;
+  brand_primary?: string | null;
+  brand_bg?: string | null;
+  brand_fg?: string | null;
+  brand_base?: "light" | "dark" | null;
+  brand_font?: string | null;
 };
 
 export type InvoiceItem = { name_snapshot: string; qty: number; price_snapshot: number };
@@ -94,6 +101,7 @@ export type MenuItem = {
   image_url?: string | null;
   video_url?: string | null;
   station?: "kitchen" | "bar";
+  featured?: boolean; // platillo del día / destacado
 };
 
 export type OrderItem = {
@@ -275,6 +283,13 @@ export type DinerSession = {
   table_label: string;
   mode: BusinessMode;
   expires_at: number;
+  // Marca del negocio (para personalizar la cara al cliente)
+  logo_url?: string | null;
+  brand_primary?: string | null;
+  brand_bg?: string | null;
+  brand_fg?: string | null;
+  brand_base?: "light" | "dark" | null;
+  brand_font?: string | null;
 };
 
 // ── Seed / onboarding (espejo de database/models.py SeedRequest) ──

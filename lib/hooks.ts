@@ -65,7 +65,28 @@ export function useUpdateBusiness(businessId: number) {
       tax_id?: string;
       legal_name?: string;
       fiscal_address?: string;
+      // Marca / white-label ("" = restablecer)
+      logo_url?: string;
+      brand_primary?: string;
+      brand_bg?: string;
+      brand_fg?: string;
+      brand_base?: string;
+      brand_font?: string;
     }) => api.patch<Business>(`/businesses/${businessId}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["businesses"] }),
+  });
+}
+
+// Sube el logo del negocio (multipart). El backend lo guarda en Storage y
+// devuelve el negocio con logo_url ya seteada.
+export function useUploadLogo(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return api.upload<Business>(`/businesses/${businessId}/logo`, form);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["businesses"] }),
   });
 }
@@ -209,7 +230,7 @@ export function useCreateMenuItem(businessId: number) {
 }
 
 type MenuItemPatch = Partial<
-  Pick<MenuItem, "name" | "price" | "available" | "description" | "available_in" | "category_id" | "station">
+  Pick<MenuItem, "name" | "price" | "available" | "description" | "available_in" | "category_id" | "station" | "featured">
 >;
 
 export function useUpdateMenuItem(businessId: number) {

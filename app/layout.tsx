@@ -1,14 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Geist_Mono, Oswald } from "next/font/google";
+import { Geist_Mono, Inter, Montserrat, Oswald, Playfair_Display, Poppins } from "next/font/google";
 import "./globals.css";
 
 import { PwaRegister } from "@/components/PwaRegister";
 
 import { Providers } from "./providers";
 
-// Oswald (variable 200–700) = fuente principal de la app. Mono para cifras.
-const oswald = Oswald({ variable: "--font-sans", subsets: ["latin"], display: "swap" });
+// Fuentes curadas para el branding por negocio. Cada una expone --font-<key>;
+// el negocio elige cuál mapear a --font-sans (default = Oswald). Mono para cifras.
+const oswald = Oswald({ variable: "--font-oswald", subsets: ["latin"], display: "swap" });
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
+const poppins = Poppins({ variable: "--font-poppins", subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], display: "swap" });
+const montserrat = Montserrat({ variable: "--font-montserrat", subsets: ["latin"], display: "swap" });
+const playfair = Playfair_Display({ variable: "--font-playfair", subsets: ["latin"], display: "swap" });
 const geistMono = Geist_Mono({ variable: "--font-mono", subsets: ["latin"], display: "swap" });
+
+const fontVars = [oswald, inter, poppins, montserrat, playfair, geistMono].map((f) => f.variable).join(" ");
 
 export const metadata: Metadata = {
   title: "Connek Food — pedidos por QR",
@@ -37,7 +44,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html
       lang="es"
-      className={`${oswald.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${fontVars} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full">

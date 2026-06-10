@@ -16,9 +16,13 @@ import {
   FileText,
   ImagePlus,
   type LucideIcon,
+  Palette,
   Play,
   Plus,
+  RotateCcw,
+  Star,
   Trash2,
+  Type,
   Users,
   Video,
   X,
@@ -29,6 +33,7 @@ import { useEffect, useRef, useState } from "react";
 import { FloorMap } from "@/components/FloorMap";
 import { Toggle } from "@/components/Toggle";
 import { useAuth } from "@/lib/auth";
+import { BRAND_FONTS, BRAND_PRESETS, brandStyle, contrastRatio, isHex } from "@/lib/brand";
 import { useBusiness } from "@/lib/business";
 import { API_URL } from "@/lib/config";
 import {
@@ -55,6 +60,7 @@ import {
   useUpdateBusiness,
   useUpdateMenuItem,
   useUpdateTable,
+  useUploadLogo,
   useUploadMenuImage,
   useUploadMenuVideo,
   useUpsertEmployee,
@@ -560,6 +566,15 @@ function MenuItemRow({ businessId, item, categories }: { businessId: number; ite
             className="min-w-0 flex-1 bg-transparent font-medium text-foreground outline-none"
           />
           <button
+            type="button"
+            className={`shrink-0 transition ${item.featured ? "text-amber-400" : "text-foreground/30 hover:text-foreground/60"}`}
+            aria-label={item.featured ? `Quitar ${item.name} del día` : `Marcar ${item.name} como platillo del día`}
+            title={item.featured ? "Platillo del día — clic para quitar" : "Marcar como platillo del día"}
+            onClick={() => update.mutate({ itemId: item.id, data: { featured: !item.featured } }, onErr)}
+          >
+            <Star className={`size-4 ${item.featured ? "fill-amber-400" : ""}`} />
+          </button>
+          <button
             className="shrink-0 text-foreground/40 transition hover:text-foreground"
             aria-label={`Eliminar ${item.name}`}
             onClick={() => del.mutate(item.id, { onError: () => show("No se pudo eliminar", "error") })}
@@ -694,6 +709,196 @@ const zoneSelectCls =
 
 const CURRENCIES = ["USD", "CAD", "EUR", "MXN", "COP", "GBP", "BRL", "ARS"];
 
+// Picker de color con su hex visible.
+function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] uppercase tracking-wide text-foreground/45">{label}</span>
+      <span className="flex items-center gap-2 rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1.5">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="size-7 cursor-pointer rounded border-0 bg-transparent p-0"
+          aria-label={label}
+        />
+        <span className="font-mono text-xs text-foreground/70">{value}</span>
+      </span>
+    </label>
+  );
+}
+
+// Marca / white-label: logo + paleta (acento/fondo/texto) + tipografía, con
+// presets, restablecer, aviso de contraste y preview en vivo.
+function BrandSettings({ business }: { business: Business }) {
+  const update = useUpdateBusiness(business.id);
+  const uploadLogo = useUploadLogo(business.id);
+  const { show } = useToast();
+  const logoRef = useRef<HTMLInputElement>(null);
+
+  const [primary, setPrimary] = useState(business.brand_primary || "#10b981");
+  const [bg, setBg] = useState(business.brand_bg || "#0b1f17");
+  const [fg, setFg] = useState(business.brand_fg || "#ecfdf5");
+  const [font, setFont] = useState(business.brand_font || "oswald");
+
+  useEffect(() => {
+    setPrimary(business.brand_primary || "#10b981");
+    setBg(business.brand_bg || "#0b1f17");
+    setFg(business.brand_fg || "#ecfdf5");
+    setFont(business.brand_font || "oswald");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business.id]);
+
+  const ok = (m: string) => () => show(m, "success");
+  const fail = () => show("No se pudo guardar", "error");
+
+  const apply = (p: string, b: string, f: string) => {
+    setPrimary(p); setBg(b); setFg(f);
+    update.mutate({ brand_primary: p, brand_bg: b, brand_fg: f }, { onSuccess: ok("Marca aplicada"), onError: fail });
+  };
+  const reset = () => {
+    setFont("oswald");
+    update.mutate(
+      { brand_primary: "", brand_bg: "", brand_fg: "", brand_font: "" },
+      { onSuccess: ok("Marca restablecida (monocromo)"), onError: fail },
+    );
+  };
+  const changeFont = (f: string) => {
+    setFont(f);
+    update.mutate({ brand_font: f === "oswald" ? "" : f }, { onSuccess: ok("Tipografía actualizada"), onError: fail });
+  };
+  const pickLogo = (file?: File) => {
+    if (!file) return;
+    uploadLogo.mutate(file, {
+      onSuccess: ok("Logo actualizado"),
+      onError: (e) => show(e instanceof Error ? e.message : "No se pudo subir el logo", "error"),
+    });
+  };
+
+  const branded = isHex(business.brand_primary) || isHex(business.brand_bg);
+  const cr = contrastRatio(fg, bg);
+  const lowContrast = cr < 4.5;
+  const preview = brandStyle({ brand_primary: primary, brand_bg: bg, brand_fg: fg, brand_font: font });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/70">
+        <Palette className="size-4" /> Marca y apariencia
+      </label>
+
+      {/* Logo */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => logoRef.current?.click()}
+          className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl border border-foreground/15 bg-foreground/[0.04]"
+          aria-label="Subir logo"
+        >
+          {business.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={business.logo_url} alt="logo" className="absolute inset-0 size-full object-cover" />
+          ) : (
+            <ImagePlus className="size-6 text-foreground/40" />
+          )}
+          {uploadLogo.isPending && (
+            <span className="absolute inset-0 grid place-items-center bg-background/60"><Spinner size="sm" color="current" /></span>
+          )}
+        </button>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm text-foreground">Logo del negocio</span>
+          <span className="text-[11px] text-foreground/40">JPG, PNG o WEBP · máx 2 MB</span>
+          {business.logo_url && (
+            <button type="button" onClick={() => update.mutate({ logo_url: "" }, { onSuccess: ok("Logo quitado"), onError: fail })} className="self-start text-xs text-foreground/50 transition hover:text-foreground">
+              Quitar logo
+            </button>
+          )}
+        </div>
+      </div>
+      <input ref={logoRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { pickLogo(e.target.files?.[0]); e.target.value = ""; }} />
+
+      {/* Presets */}
+      <div className="flex flex-wrap gap-2">
+        {BRAND_PRESETS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => (p.key === "mono" ? reset() : apply(p.primary, p.bg, p.fg))}
+            className="flex items-center gap-1.5 rounded-full border border-foreground/15 bg-foreground/[0.04] px-3 py-1.5 text-xs text-foreground/80 transition hover:bg-foreground/10"
+          >
+            {p.key === "mono" ? (
+              <RotateCcw className="size-3.5" />
+            ) : (
+              <span className="size-3.5 rounded-full border border-foreground/20" style={{ background: p.primary }} />
+            )}
+            {p.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Pickers */}
+      <div className="grid grid-cols-3 gap-2">
+        <ColorField label="Acento" value={primary} onChange={setPrimary} />
+        <ColorField label="Fondo" value={bg} onChange={setBg} />
+        <ColorField label="Texto" value={fg} onChange={setFg} />
+      </div>
+
+      {/* Tipografía */}
+      <label className="flex flex-col gap-1">
+        <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-foreground/45"><Type className="size-3.5" /> Tipografía</span>
+        <select
+          value={font}
+          onChange={(e) => changeFont(e.target.value)}
+          className="rounded-lg border border-foreground/15 bg-foreground/5 px-3 py-2 text-sm text-foreground outline-none"
+          style={{ fontFamily: `var(--font-${font})` }}
+        >
+          {BRAND_FONTS.map((f) => (
+            <option key={f.key} value={f.key} style={{ fontFamily: `var(--font-${f.key})` }}>{f.label}</option>
+          ))}
+        </select>
+      </label>
+
+      {lowContrast && (
+        <p className="text-xs" style={{ color: "#f59e0b" }}>
+          ⚠ Contraste bajo entre fondo y texto ({cr.toFixed(1)}:1). Puede ser difícil de leer.
+        </p>
+      )}
+
+      {/* Preview en vivo */}
+      <div className="overflow-hidden rounded-2xl border border-foreground/15" style={{ ...preview, fontFamily: "var(--font-sans)" }}>
+        <div className="flex flex-col gap-3 p-4" style={{ background: "var(--background)", color: "var(--foreground)" }}>
+          <div className="flex items-center gap-2">
+            <div className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
+              {business.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={business.logo_url} alt="" className="size-full object-cover" />
+              ) : (
+                <Star className="size-4" />
+              )}
+            </div>
+            <span className="font-bold">{business.name}</span>
+          </div>
+          <div className="rounded-xl p-3" style={{ background: "var(--surface)" }}>
+            <p className="text-xs opacity-60">Vista previa de tu marca</p>
+            <p className="font-bold">Platillo de muestra · $12.00</p>
+          </div>
+          <span className="rounded-xl py-2 text-center font-bold" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
+            Botón principal
+          </span>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Button variant="primary" isDisabled={update.isPending} onPress={() => apply(primary, bg, fg)}>
+          {branded ? "Aplicar colores" : "Activar mi paleta"}
+        </Button>
+        {branded && (
+          <Button variant="secondary" isDisabled={update.isPending} onPress={reset}>Restablecer</Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Configuración del negocio: nombre, tipo (bar/restaurante), moneda y módulos.
 // Cada cambio se guarda al instante (PATCH); el nombre tiene botón Guardar.
 function Settings({ business }: { business: Business }) {
@@ -769,6 +974,9 @@ function Settings({ business }: { business: Business }) {
           </Button>
         </div>
       </div>
+
+      {/* Marca / apariencia (white-label) */}
+      <BrandSettings business={business} />
 
       {/* Datos fiscales (factura) */}
       <div className="flex flex-col gap-2">

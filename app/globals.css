@@ -20,9 +20,14 @@
   --success-foreground: oklch(1 0 0);
   --warning: oklch(0.45 0 0);
   --warning-foreground: oklch(1 0 0);
+  /* Superficie de paneles (sidebar/drawer/modales). Antes no estaba definida. */
+  --surface: color-mix(in oklab, var(--foreground) 4%, var(--background));
+  /* Fuente base (la marca del negocio puede sobreescribir --font-sans). */
+  --font-sans: var(--font-oswald);
 }
 
 .dark {
+  --surface: color-mix(in oklab, var(--foreground) 6%, var(--background));
   --background: oklch(0 0 0); /* negro puro */
   --accent: oklch(1 0 0); /* blanco = primario en oscuro */
   --accent-foreground: oklch(0 0 0);

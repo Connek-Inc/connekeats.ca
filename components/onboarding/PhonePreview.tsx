@@ -21,7 +21,7 @@ export function PhonePreview({
 
   return (
     <div className="w-[300px] shrink-0">
-      <div className="relative rounded-[2.5rem] border-[10px] border-[#1c1c1c] bg-background shadow-2xl">
+      <div className="relative rounded-[2.5rem] border-[10px] border-foreground/15 bg-background shadow-2xl">
         {/* notch */}
         <div className="absolute left-1/2 top-2.5 z-10 h-1.5 w-16 -translate-x-1/2 rounded-full bg-foreground/15" />
         <div
