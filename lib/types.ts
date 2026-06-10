@@ -104,9 +104,13 @@ export type Bill = {
   business_id: number;
   table_id: number;
   order_id: number | null;
+  subtotal?: number;
+  discount?: number;
+  tip?: number;
   total: number;
   status: "pending" | "paid" | "cancelled";
   requested_by: "waiter" | "diner";
+  payment_method?: string | null;
 };
 
 export type StaffRoleRow = {

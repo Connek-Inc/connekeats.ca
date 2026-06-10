@@ -323,8 +323,12 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
   const { show } = useToast();
   const [cart, setCart] = useState<Record<number, number>>({});
   const [tab, setTab] = useState<"resumen" | "pedir">("resumen");
+  const [discount, setDiscount] = useState("");
+  const [tip, setTip] = useState("");
 
   const activeOrder = orders.data?.find((o) => o.table_id === table.id && ACTIVE_ORDER.includes(o.status)) ?? null;
+  const billBase = Number(activeOrder?.total) || 0;
+  const billTotal = Math.max(0, billBase - (Number(discount) || 0) + (Number(tip) || 0));
   const detail = useOrderWithItems(businessId, activeOrder?.id ?? null);
   const tableReqs = (requests.data ?? []).filter((r) => r.table_id === table.id && r.status !== "done");
   const items = menu.data?.items ?? [];
@@ -359,8 +363,13 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
   }
   async function cobrar(method: string) {
     try {
-      await checkout.mutateAsync({ tableId: table.id, paymentMethod: method });
-      show("Mesa cobrada", "success");
+      await checkout.mutateAsync({
+        tableId: table.id,
+        paymentMethod: method,
+        discount: Number(discount) || 0,
+        tip: Number(tip) || 0,
+      });
+      show(`Mesa cobrada · $${billTotal.toFixed(2)}`, "success");
       onClose();
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo cobrar", "error");
@@ -488,11 +497,67 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
               )}
             </div>
 
-            {/* Cobrar */}
+            {/* Cobrar (con descuento + propina) */}
             <div>
               <p className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wide text-foreground/50">
-                <HandCoins className="size-3.5" /> Cobrar{activeOrder ? ` · $${Number(activeOrder.total).toFixed(2)}` : ""} con:
+                <HandCoins className="size-3.5" /> Cobrar
               </p>
+              <div className="mb-3 flex flex-col gap-2 rounded-2xl bg-foreground/[0.05] p-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-foreground/60">Subtotal</span>
+                  <span className="text-foreground">${billBase.toFixed(2)}</span>
+                </div>
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-foreground/60">Descuento</span>
+                  <span className="flex items-center gap-1">
+                    {[10, 15].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setDiscount(((billBase * p) / 100).toFixed(2))}
+                        className="rounded-full border border-foreground/15 px-2 py-0.5 text-[11px] text-foreground/60 transition hover:text-foreground"
+                      >
+                        {p}%
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value)}
+                      placeholder="0"
+                      className="w-20 rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1 text-right text-foreground outline-none"
+                    />
+                  </span>
+                </label>
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-foreground/60">Propina</span>
+                  <span className="flex items-center gap-1">
+                    {[10, 15, 20].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setTip(((billBase * p) / 100).toFixed(2))}
+                        className="rounded-full border border-foreground/15 px-2 py-0.5 text-[11px] text-foreground/60 transition hover:text-foreground"
+                      >
+                        {p}%
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={tip}
+                      onChange={(e) => setTip(e.target.value)}
+                      placeholder="0"
+                      className="w-20 rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1 text-right text-foreground outline-none"
+                    />
+                  </span>
+                </label>
+                <div className="flex justify-between border-t border-foreground/10 pt-2 font-bold text-foreground">
+                  <span>Total</span>
+                  <span>${billTotal.toFixed(2)}</span>
+                </div>
+              </div>
               <PayPicker pending={checkout.isPending} onPay={(m) => cobrar(m)} />
             </div>
 

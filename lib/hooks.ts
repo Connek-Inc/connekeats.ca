@@ -522,10 +522,24 @@ export function useBills(businessId: number | null) {
 export function useMarkBillPaid(businessId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ billId, paymentMethod }: { billId: number; paymentMethod?: string }) =>
-      api.patch(
-        `/businesses/${businessId}/bills/${billId}/paid${paymentMethod ? `?payment_method=${paymentMethod}` : ""}`,
-      ),
+    mutationFn: ({
+      billId,
+      paymentMethod,
+      discount = 0,
+      tip = 0,
+    }: {
+      billId: number;
+      paymentMethod?: string;
+      discount?: number;
+      tip?: number;
+    }) => {
+      const q = new URLSearchParams();
+      if (paymentMethod) q.set("payment_method", paymentMethod);
+      if (discount) q.set("discount", String(discount));
+      if (tip) q.set("tip", String(tip));
+      const qs = q.toString();
+      return api.patch(`/businesses/${businessId}/bills/${billId}/paid${qs ? `?${qs}` : ""}`);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bills", businessId] });
       qc.invalidateQueries({ queryKey: ["tables", businessId] });
@@ -550,10 +564,22 @@ export function useCreateStaffOrder(businessId: number) {
 export function useCheckoutTable(businessId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ tableId, paymentMethod }: { tableId: number; paymentMethod?: string }) =>
+    mutationFn: ({
+      tableId,
+      paymentMethod,
+      discount = 0,
+      tip = 0,
+    }: {
+      tableId: number;
+      paymentMethod?: string;
+      discount?: number;
+      tip?: number;
+    }) =>
       api.post(`/businesses/${businessId}/bills/checkout`, {
         table_id: tableId,
         payment_method: paymentMethod ?? null,
+        discount,
+        tip,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bills", businessId] });
