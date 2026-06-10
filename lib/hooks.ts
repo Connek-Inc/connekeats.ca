@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type {
   Bill,
+  BillDetail,
   BuffetStation,
   Business,
   CashCloseResult,
@@ -587,6 +588,68 @@ export function useCheckoutTable(businessId: number) {
       qc.invalidateQueries({ queryKey: ["orders", businessId] });
       qc.invalidateQueries({ queryKey: ["sales-summary", businessId] });
       qc.invalidateQueries({ queryKey: ["cash-current", businessId] });
+    },
+  });
+}
+
+// ── POS Fase 3: dividir cuenta (pagos parciales) + pagar varias mesas ──
+export function useOpenBill(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tableId: number) =>
+      api.post<BillDetail>(`/businesses/${businessId}/bills/open`, { table_id: tableId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bills", businessId] }),
+  });
+}
+
+export function useBillDetail(businessId: number, billId: number | null) {
+  return useQuery({
+    enabled: !!billId,
+    queryKey: ["bill", businessId, billId],
+    queryFn: () => api.get<BillDetail>(`/businesses/${businessId}/bills/${billId}`),
+  });
+}
+
+export function useAddPayment(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      billId,
+      amount,
+      method,
+      note,
+    }: {
+      billId: number;
+      amount: number;
+      method?: string;
+      note?: string;
+    }) =>
+      api.post<{ ok: boolean; paid: number; remaining: number; done: boolean }>(
+        `/businesses/${businessId}/bills/${billId}/payments`,
+        { amount, method: method ?? null, note: note ?? null },
+      ),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["bill", businessId, v.billId] });
+      qc.invalidateQueries({ queryKey: ["bills", businessId] });
+      qc.invalidateQueries({ queryKey: ["tables", businessId] });
+      qc.invalidateQueries({ queryKey: ["orders", businessId] });
+    },
+  });
+}
+
+export function useCheckoutMulti(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tableIds, paymentMethod }: { tableIds: number[]; paymentMethod?: string }) =>
+      api.post<{ ok: boolean; bill_ids: number[]; total: number }>(
+        `/businesses/${businessId}/bills/checkout-multi`,
+        { table_ids: tableIds, payment_method: paymentMethod ?? null },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bills", businessId] });
+      qc.invalidateQueries({ queryKey: ["tables", businessId] });
+      qc.invalidateQueries({ queryKey: ["orders", businessId] });
+      qc.invalidateQueries({ queryKey: ["sales-summary", businessId] });
     },
   });
 }

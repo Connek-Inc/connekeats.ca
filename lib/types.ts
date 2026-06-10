@@ -113,6 +113,22 @@ export type Bill = {
   payment_method?: string | null;
 };
 
+export type BillPayment = {
+  id: number;
+  bill_id: number;
+  amount: number;
+  method: string | null;
+  note: string | null;
+  created_at?: string | null;
+};
+
+export type BillDetail = {
+  bill: Bill;
+  payments: BillPayment[];
+  paid: number;
+  remaining: number;
+};
+
 export type StaffRoleRow = {
   id: number;
   business_id: number;
