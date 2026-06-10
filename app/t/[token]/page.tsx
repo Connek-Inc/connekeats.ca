@@ -6,8 +6,10 @@ import { ArrowLeft, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minu
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { LangSwitcher } from "@/components/LangSwitcher";
 import { api } from "@/lib/api";
 import { BrandStyle } from "@/lib/brand";
+import { useT } from "@/lib/i18n";
 import { presetFor } from "@/lib/modePresets";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
@@ -16,6 +18,7 @@ import type { DinerSession, MenuCategory, MenuItem, Order } from "@/lib/types";
 export default function DinerTablePage() {
   const { token: qrToken } = useParams<{ token: string }>();
   const { show } = useToast();
+  const t = useT();
 
   const [session, setSession] = useState<DinerSession | null>(null);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -77,7 +80,7 @@ export default function DinerTablePage() {
       await api.post("/diner/order", cartLines.map((l) => ({ menu_item_id: l.item.id, qty: l.qty })), dt);
       setCart({});
       await refreshOrder();
-      show("¡Pedido enviado a cocina!", "success");
+      show(t("toast.orderSent"), "success");
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo enviar el pedido", "error");
     } finally {
@@ -93,7 +96,7 @@ export default function DinerTablePage() {
         { table_id: session!.table_id, type, payload: text ? { text } : null },
         dt,
       );
-      show(type === "call_waiter" ? "Mesero avisado" : `Pedido: ${text}`, "success");
+      show(type === "call_waiter" ? t("toast.waiterNotified") : text ?? "", "success");
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo enviar", "error");
     }
@@ -104,7 +107,7 @@ export default function DinerTablePage() {
     try {
       await api.post("/diner/bill", undefined, dt);
       setBillRequested(true);
-      show("Cuenta solicitada", "success");
+      show(t("toast.billRequested"), "success");
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo pedir la cuenta", "error");
     }
@@ -132,8 +135,8 @@ export default function DinerTablePage() {
     return (
       <main className="flex min-h-dvh flex-col items-center justify-center gap-2 px-6 text-center">
         <Unplug className="size-12 text-foreground/70" />
-        <h1 className="text-xl font-semibold text-foreground">No se pudo abrir la mesa</h1>
-        <p className="text-foreground/60">{error ?? "QR inválido"}</p>
+        <h1 className="text-xl font-semibold text-foreground">{t("diner.cantOpen")}</h1>
+        <p className="text-foreground/60">{error ?? t("diner.cantOpenSub")}</p>
       </main>
     );
   }
@@ -164,9 +167,12 @@ export default function DinerTablePage() {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={session.logo_url} alt="" className="mb-2 h-12 w-auto max-w-[170px] rounded-xl object-contain" />
         )}
-        <p className="flex items-center gap-1.5 text-foreground/60">
-          <mp.Icon className="size-4" /> {mp.label}
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 text-foreground/60">
+            <mp.Icon className="size-4" /> {mp.label}
+          </p>
+          <LangSwitcher />
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-4xl font-bold tracking-tight text-foreground">{session.table_label}</h1>
           <span className="flex items-center gap-1.5 rounded-full border border-foreground/15 px-2.5 py-1 text-xs text-foreground/70">
@@ -185,7 +191,7 @@ export default function DinerTablePage() {
         className="mb-5 flex w-full items-center justify-center gap-2 rounded-3xl py-4 text-lg font-extrabold shadow-lg transition active:scale-[0.98]"
         style={{ backgroundColor: color.hex, color: color.fg }}
       >
-        <Hand className="size-6" /> Estoy aquí
+        <Hand className="size-6" /> {t("diner.here")}
       </button>
 
       {/* Acciones rápidas — distintas según el modo (bar / restaurante) */}
@@ -207,7 +213,7 @@ export default function DinerTablePage() {
       {/* Cuenta actual */}
       {order && order.items?.length ? (
         <Card className="glass mb-5 rounded-3xl p-4">
-          <p className="mb-2 font-semibold text-foreground">Tu cuenta</p>
+          <p className="mb-2 font-semibold text-foreground">{t("diner.yourBill")}</p>
           {order.items.map((it) => (
             <div key={it.id} className="mb-1 flex justify-between text-sm">
               <span className="text-foreground/70">
@@ -217,7 +223,7 @@ export default function DinerTablePage() {
             </div>
           ))}
           <div className="mt-2 flex justify-between border-t border-foreground/10 pt-2 font-bold text-foreground">
-            <span>Total</span>
+            <span>{t("common.total")}</span>
             <span>${Number(order.total).toFixed(2)}</span>
           </div>
         </Card>
@@ -228,12 +234,12 @@ export default function DinerTablePage() {
         billRequested ? (
           <Card className="glass mb-5 flex items-center gap-2 rounded-3xl p-4 text-foreground">
             <CheckCircle2 className="size-5 shrink-0" />
-            <span className="text-sm">Cuenta solicitada · el mesero va en camino para cobrarte.</span>
+            <span className="text-sm">{t("diner.billRequested")}</span>
           </Card>
         ) : (
           <Button variant="primary" size="lg" fullWidth className="mb-5" onPress={() => void requestBill()}>
             <span className="flex items-center justify-center gap-2">
-              <CreditCard className="size-5" /> Ir a pagar · ${Number(order.total).toFixed(2)}
+              <CreditCard className="size-5" /> {t("diner.payNow")} · ${Number(order.total).toFixed(2)}
             </span>
           </Button>
         )
@@ -243,7 +249,7 @@ export default function DinerTablePage() {
       {featured.length > 0 && (
         <section className="mb-5">
           <p className="mb-2 flex items-center gap-1.5 text-sm font-bold text-foreground">
-            <Star className="size-4 fill-foreground" /> Del día
+            <Star className="size-4 fill-foreground" /> {t("diner.ofTheDay")}
           </p>
           <div className="grid grid-cols-2 gap-3">
             {featured.map((it) => (
@@ -266,7 +272,7 @@ export default function DinerTablePage() {
       {chipCats.length > 0 && (
         <div className="-mx-5 mb-3 flex gap-2 overflow-x-auto px-5 pb-1">
           <CatChip active={cat === "all"} onClick={() => setCat("all")}>
-            Todo
+            {t("diner.all")}
           </CatChip>
           {chipCats.map((c) => (
             <CatChip key={c.id} active={cat === c.id} onClick={() => setCat(c.id)}>
@@ -277,9 +283,9 @@ export default function DinerTablePage() {
       )}
 
       {!items.length ? (
-        <p className="text-foreground/40">Este menú aún no tiene ítems.</p>
+        <p className="text-foreground/40">{t("diner.noItems")}</p>
       ) : !visibleItems.length ? (
-        <p className="text-foreground/40">No hay ítems en esta categoría.</p>
+        <p className="text-foreground/40">{t("diner.noCatItems")}</p>
       ) : (
         menuGroups.map((g) => (
           <section key={g.key} className="mb-5">
@@ -303,7 +309,7 @@ export default function DinerTablePage() {
       {cartLines.length > 0 && (
         <div className="safe-pb fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-xl px-5 pt-2">
           <Button variant="primary" size="lg" fullWidth isDisabled={sending} onPress={sendOrder}>
-            {sending ? <Spinner color="current" size="sm" /> : `Enviar pedido · $${cartTotal.toFixed(2)}`}
+            {sending ? <Spinner color="current" size="sm" /> : `${t("diner.sendOrder")} · $${cartTotal.toFixed(2)}`}
           </Button>
         </div>
       )}
@@ -330,16 +336,16 @@ export default function DinerTablePage() {
           aria-label="Cerrar"
         >
           <Hand className="size-24" />
-          <p className="text-2xl font-semibold opacity-90">Levanta el teléfono</p>
+          <p className="text-2xl font-semibold opacity-90">{t("diner.liftPhone")}</p>
           <h2 className="text-6xl font-black leading-none">{session.table_label}</h2>
-          <p className="text-lg font-medium opacity-90">El mesero te ubica por tu color</p>
+          <p className="text-lg font-medium opacity-90">{t("diner.waiterLocates")}</p>
           <span
             className="mt-2 rounded-full px-4 py-1.5 text-sm font-bold"
             style={{ backgroundColor: color.fg, color: color.hex }}
           >
             {color.name}
           </span>
-          <span className="absolute bottom-8 text-sm opacity-70">Toca para cerrar</span>
+          <span className="absolute bottom-8 text-sm opacity-70">{t("diner.tapToClose")}</span>
         </div>
       )}
 
@@ -347,11 +353,11 @@ export default function DinerTablePage() {
       {reviewSent ? (
         <Card className="glass mt-6 flex flex-col items-center gap-1 rounded-3xl p-6 text-center">
           <Star className="size-8 fill-foreground text-foreground" />
-          <p className="font-semibold text-foreground">¡Gracias por tu opinión!</p>
+          <p className="font-semibold text-foreground">{t("diner.thanksReview")}</p>
         </Card>
       ) : (
         <Card className="glass mt-6 flex flex-col gap-3 rounded-3xl p-4">
-          <p className="font-semibold text-foreground">¿Qué te pareció?</p>
+          <p className="font-semibold text-foreground">{t("diner.howWasIt")}</p>
           <div className="flex gap-1.5">
             {[1, 2, 3, 4, 5].map((n) => (
               <button key={n} type="button" onClick={() => setReviewRating(n)} aria-label={`${n} estrella${n > 1 ? "s" : ""}`}>
@@ -362,12 +368,12 @@ export default function DinerTablePage() {
           <textarea
             value={reviewComment}
             onChange={(e) => setReviewComment(e.target.value)}
-            placeholder="Cuéntanos tu experiencia (opcional)"
+            placeholder={t("diner.reviewPlaceholder")}
             rows={2}
             className="resize-none rounded-xl border border-foreground/15 bg-foreground/5 px-3 py-2 text-sm text-foreground outline-none"
           />
           <Button variant="primary" isDisabled={!reviewRating} onPress={submitReview}>
-            Enviar opinión
+            {t("diner.sendReview")}
           </Button>
         </Card>
       )}
@@ -473,6 +479,7 @@ function DishDetail({
   const [expanded, setExpanded] = useState(false);
   const [fav, setFav] = useState(false);
   const [count, setCount] = useState(1);
+  const t = useT();
   const desc = item.description ?? "";
   const longDesc = desc.length > 120;
 
@@ -525,17 +532,17 @@ function DishDetail({
             {expanded || !longDesc ? desc : `${desc.slice(0, 120)}… `}
             {longDesc && (
               <button onClick={() => setExpanded((v) => !v)} className="font-semibold text-foreground">
-                {expanded ? " ver menos" : "ver más"}
+                {expanded ? ` ${t("diner.seeLess")}` : t("diner.seeMore")}
               </button>
             )}
           </p>
         ) : (
-          <p className="text-foreground/40">Sin descripción.</p>
+          <p className="text-foreground/40">{t("diner.noDescription")}</p>
         )}
 
         {pairings.length > 0 && (
           <div className="mt-6">
-            <p className="mb-2 text-xs uppercase tracking-wide text-foreground/50">También te puede gustar</p>
+            <p className="mb-2 text-xs uppercase tracking-wide text-foreground/50">{t("diner.alsoLike")}</p>
             <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1">
               {pairings.map((p) => (
                 <button key={p.id} onClick={() => onOpen(p)} className="w-32 shrink-0 text-left">
@@ -566,7 +573,7 @@ function DishDetail({
           </button>
         </div>
         <Button variant="primary" size="lg" className="flex-1" onPress={() => { onAdd(count); onClose(); }}>
-          Agregar · ${(Number(item.price) * count).toFixed(2)}
+          {t("common.add")} · ${(Number(item.price) * count).toFixed(2)}
         </Button>
       </div>
     </div>

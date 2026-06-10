@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useBusiness } from "@/lib/business";
 import { useBills, useBusinesses, useOrders, useSalesSummary, useTables } from "@/lib/hooks";
+import { useT } from "@/lib/i18n";
 import { presetFor } from "@/lib/modePresets";
 
 const money = (n: number) => `$${(Number(n) || 0).toFixed(2)}`;
@@ -18,6 +19,7 @@ export default function HomePage() {
   const { businessId, setBusinessId } = useBusiness();
   const businesses = useBusinesses();
   const router = useRouter();
+  const t = useT();
   const [pickTable, setPickTable] = useState(false); // selector de mesa para "Vista cliente"
 
   useEffect(() => {
@@ -64,17 +66,17 @@ export default function HomePage() {
         <Spinner color="accent" />
       ) : !businesses.data?.length ? (
         <Card className="glass flex flex-col gap-3 rounded-3xl p-5">
-          <h2 className="text-lg font-semibold text-foreground">Crea tu primer negocio</h2>
-          <p className="text-foreground/60">Elige modo bar o restaurante, agrega mesas y menú, y genera los QR.</p>
+          <h2 className="text-lg font-semibold text-foreground">{t("home.firstBusinessTitle")}</h2>
+          <p className="text-foreground/60">{t("home.firstBusinessSub")}</p>
           <Button variant="primary" onPress={() => router.push("/onboarding")}>
-            Crear negocio
+            {t("home.createBusiness")}
           </Button>
         </Card>
       ) : (
         <div className="flex flex-col gap-5">
           {/* ── Selector de negocio ── */}
           <section className="flex flex-col gap-1.5">
-            <label className="text-xs uppercase tracking-wide text-foreground/50">Negocio</label>
+            <label className="text-xs uppercase tracking-wide text-foreground/50">{t("home.business")}</label>
             <div className="flex items-center gap-2">
               <select
                 value={businessId ?? ""}
@@ -98,12 +100,12 @@ export default function HomePage() {
           {active && (
             <section className="grid grid-cols-2 gap-3">
               {isOwner && (
-                <Kpi icon={TrendingUp} label="Ventas hoy" value={money(sales.data?.revenue ?? 0)} sub={`${sales.data?.count ?? 0} pedidos`} loading={sales.isLoading} />
+                <Kpi icon={TrendingUp} label={t("home.salesToday")} value={money(sales.data?.revenue ?? 0)} sub={`${sales.data?.count ?? 0} ${t("home.orders")}`} loading={sales.isLoading} />
               )}
-              <Kpi icon={Armchair} label="Mesas" value={`${occupied}/${totalTables}`} sub="ocupadas" loading={tables.isLoading} />
-              <Kpi icon={ConciergeBell} label="Pedidos activos" value={String(activeOrders)} loading={orders.isLoading} />
+              <Kpi icon={Armchair} label={t("home.tables")} value={`${occupied}/${totalTables}`} sub={t("home.occupied")} loading={tables.isLoading} />
+              <Kpi icon={ConciergeBell} label={t("home.activeOrders")} value={String(activeOrders)} loading={orders.isLoading} />
               {canWaiter && (
-                <Kpi icon={Receipt} label="Por cobrar" value={String(pending.length)} sub={money(pendingSum)} loading={bills.isLoading} />
+                <Kpi icon={Receipt} label={t("home.toCollect")} value={String(pending.length)} sub={money(pendingSum)} loading={bills.isLoading} />
               )}
             </section>
           )}
@@ -111,43 +113,43 @@ export default function HomePage() {
           {/* ── Acciones rápidas ── */}
           {active && canWaiter && (
             <section className="flex flex-col gap-2">
-              <p className="text-xs uppercase tracking-wide text-foreground/50">Acciones rápidas</p>
+              <p className="text-xs uppercase tracking-wide text-foreground/50">{t("home.quickActions")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => router.push("/waiter")}
                   className="glass flex flex-col items-start gap-1 rounded-3xl p-4 text-left transition hover:bg-foreground/10"
                 >
                   <LayoutGrid className="size-6 text-foreground" />
-                  <span className="font-semibold text-foreground">Mesas</span>
-                  <span className="text-xs text-foreground/50">Salón, pedidos y cobro</span>
+                  <span className="font-semibold text-foreground">{t("home.tables")}</span>
+                  <span className="text-xs text-foreground/50">{t("home.tablesSub")}</span>
                 </button>
                 <button
                   onClick={() => setPickTable((v) => !v)}
                   className={`glass flex flex-col items-start gap-1 rounded-3xl p-4 text-left transition hover:bg-foreground/10 ${pickTable ? "border-foreground/40 bg-foreground/10" : ""}`}
                 >
                   <QrCode className="size-6 text-foreground" />
-                  <span className="font-semibold text-foreground">Vista cliente</span>
-                  <span className="text-xs text-foreground/50">Ver el menú QR de una mesa</span>
+                  <span className="font-semibold text-foreground">{t("home.clientView")}</span>
+                  <span className="text-xs text-foreground/50">{t("home.clientViewSub")}</span>
                 </button>
               </div>
               {pickTable && (
                 <Card className="glass flex max-h-60 flex-col gap-0.5 overflow-y-auto rounded-2xl p-2">
                   {tables.data?.length ? (
-                    tables.data.map((t) => (
+                    tables.data.map((tbl) => (
                       <button
-                        key={t.id}
+                        key={tbl.id}
                         onClick={() => {
-                          window.open(`/t/${t.qr_token}`, "_blank");
+                          window.open(`/t/${tbl.qr_token}`, "_blank");
                           setPickTable(false);
                         }}
                         className="flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-foreground/80 transition hover:bg-foreground/10"
                       >
-                        <span className="font-medium text-foreground">{t.label}</span>
-                        <span className="text-xs text-foreground/45">abrir vista cliente →</span>
+                        <span className="font-medium text-foreground">{tbl.label}</span>
+                        <span className="text-xs text-foreground/45">{t("home.openClientView")} →</span>
                       </button>
                     ))
                   ) : (
-                    <p className="px-3 py-2 text-sm text-foreground/40">No hay mesas. Créalas en Setup → Mesas.</p>
+                    <p className="px-3 py-2 text-sm text-foreground/40">{t("home.noTables")}</p>
                   )}
                 </Card>
               )}
@@ -157,18 +159,18 @@ export default function HomePage() {
           {/* ── Operación ── */}
           {active && (
             <section className="flex flex-col gap-3">
-              <p className="text-xs uppercase tracking-wide text-foreground/50">Operación — {active.name}</p>
+              <p className="text-xs uppercase tracking-wide text-foreground/50">{t("home.operation")} — {active.name}</p>
               {canWaiter && (
                 <Button variant="primary" size="lg" onPress={() => router.push("/waiter")}>
                   <span className="flex items-center justify-center gap-2">
-                    <ConciergeBell className="size-5" /> Mesero
+                    <ConciergeBell className="size-5" /> {t("nav.waiter")}
                   </span>
                 </Button>
               )}
               {canKitchen && (
                 <Button variant="secondary" size="lg" onPress={() => router.push("/kitchen")}>
                   <span className="flex items-center justify-center gap-2">
-                    <ChefHat className="size-5" /> Cocina
+                    <ChefHat className="size-5" /> {t("nav.kitchen")}
                   </span>
                 </Button>
               )}
@@ -182,7 +184,7 @@ export default function HomePage() {
               {isOwner && features.includes("reception") && (
                 <Button variant="secondary" size="lg" onPress={() => router.push("/caja")}>
                   <span className="flex items-center justify-center gap-2">
-                    <Wallet className="size-5" /> Caja &amp; Reportes
+                    <Wallet className="size-5" /> {t("home.caja")}
                   </span>
                 </Button>
               )}

@@ -8,11 +8,13 @@ import { useParams, useRouter } from "next/navigation";
 
 import { useBusiness } from "@/lib/business";
 import { useInvoice } from "@/lib/hooks";
+import { useT } from "@/lib/i18n";
 
 export default function FacturaPage() {
   const { billId } = useParams<{ billId: string }>();
   const { businessId } = useBusiness();
   const router = useRouter();
+  const t = useT();
   const id = billId ? Number(billId) : null;
   const inv = useInvoice(businessId ?? 0, id);
 
@@ -47,7 +49,7 @@ export default function FacturaPage() {
         </button>
         <Button size="sm" variant="primary" onPress={() => window.print()}>
           <span className="flex items-center gap-1.5">
-            <Printer className="size-4" /> Imprimir / PDF
+            <Printer className="size-4" /> {t("inv.print")}
           </span>
         </Button>
       </div>
@@ -63,7 +65,7 @@ export default function FacturaPage() {
             {b.address && <p className="text-xs text-neutral-500">{b.address}</p>}
           </div>
           <div className="text-right">
-            <p className="text-sm font-bold">FACTURA</p>
+            <p className="text-sm font-bold">{t("inv.title").toUpperCase()}</p>
             <p className="text-xs text-neutral-500">{d.invoice_no}</p>
             {d.issued_at && <p className="text-xs text-neutral-500">{new Date(d.issued_at).toLocaleString()}</p>}
           </div>
@@ -72,9 +74,9 @@ export default function FacturaPage() {
         <table className="mb-4 w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500">
-              <th className="pb-1 font-medium">Descripción</th>
-              <th className="pb-1 text-center font-medium">Cant.</th>
-              <th className="pb-1 text-right font-medium">Importe</th>
+              <th className="pb-1 font-medium">{t("inv.item")}</th>
+              <th className="pb-1 text-center font-medium">{t("inv.qty")}</th>
+              <th className="pb-1 text-right font-medium">{t("inv.price")}</th>
             </tr>
           </thead>
           <tbody>
@@ -93,12 +95,12 @@ export default function FacturaPage() {
         </table>
 
         <div className="ml-auto flex w-56 flex-col gap-1 text-sm">
-          <Row label="Subtotal" value={money(d.subtotal)} />
-          {d.discount > 0 && <Row label="Descuento" value={`- ${money(d.discount)}`} />}
-          <Row label={`Impuesto (${b.tax_rate}% incl.)`} value={money(d.tax)} />
-          {d.tip > 0 && <Row label="Propina" value={money(d.tip)} />}
+          <Row label={t("inv.subtotal")} value={money(d.subtotal)} />
+          {d.discount > 0 && <Row label={t("inv.discount")} value={`- ${money(d.discount)}`} />}
+          <Row label={`${t("inv.tax")} (${b.tax_rate}% incl.)`} value={money(d.tax)} />
+          {d.tip > 0 && <Row label={t("inv.tip")} value={money(d.tip)} />}
           <div className="mt-1 flex justify-between border-t border-neutral-300 pt-2 text-base font-bold">
-            <span>TOTAL</span>
+            <span>{t("inv.total").toUpperCase()}</span>
             <span>{money(d.total)}</span>
           </div>
           {d.payment_method && <p className="mt-1 text-right text-xs text-neutral-500">Pago: {d.payment_method}</p>}

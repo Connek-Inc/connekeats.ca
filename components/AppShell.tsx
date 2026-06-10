@@ -7,9 +7,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Brand } from "@/components/Brand";
+import { LangSwitcher } from "@/components/LangSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth";
 import { BrandStyle } from "@/lib/brand";
+import { useT } from "@/lib/i18n";
 import { useBusiness } from "@/lib/business";
 import { useBusinesses } from "@/lib/hooks";
 import { MODULES } from "@/lib/modules";
@@ -30,7 +32,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const businesses = useBusinesses();
   const pathname = usePathname();
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(false);
+  // Traduce las etiquetas de navegación base (los módulos conservan su nombre).
+  const navLabel = (href: string, fallback: string) =>
+    href === "/home" ? t("nav.home") : href === "/waiter" ? t("nav.waiter") : href === "/owner" ? t("nav.setup") : fallback;
 
   const active = businesses.data?.find((b) => b.id === businessId) ?? null;
   const features = active?.features ?? [];
@@ -67,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             }`}
           >
             <it.icon className="size-[18px] shrink-0" />
-            <span>{it.label}</span>
+            <span>{navLabel(it.href, it.label)}</span>
           </button>
         );
       })}
@@ -92,6 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const footer = (
     <div className="mt-auto flex flex-col gap-3">
       {businessSwitcher}
+      <LangSwitcher />
       <div className="flex items-center justify-between gap-2">
         <span className="truncate text-xs text-foreground/45">{user?.email}</span>
         <div className="flex items-center gap-2">
@@ -100,7 +107,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => signOut()}
             className="rounded-full border border-foreground/15 px-3 py-1.5 text-xs text-foreground/70 transition hover:bg-foreground/10 hover:text-foreground"
           >
-            Salir
+            {t("nav.signout")}
           </button>
         </div>
       </div>
