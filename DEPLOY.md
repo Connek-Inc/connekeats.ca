@@ -1,45 +1,39 @@
 # Desplegar Connek Food en el VPS de Hostinger (connekeats.ca)
 
-Frontend (`connekeats.ca`) + backend (`connekeatsbackend`) + Caddy (HTTPS) en un
-solo VPS con Docker. El backend habla con tu **Supabase hosted** (la base no vive
-en el VPS).
+Frontend + backend + Caddy (HTTPS) en un solo VPS con Docker. El backend habla con
+tu **Supabase hosted** (la base no vive en el VPS) y **no se expone a internet**:
+la web reenvía `/api/*` al backend por la red interna de Docker.
 
 ```
-Navegador ──► https://connekeats.ca      (Caddy → web:3000)  Next.js
-          ──► https://api.connekeats.ca  (Caddy → api:8000)  FastAPI ──► Supabase
+Navegador ──► https://connekeats.ca            (Caddy → web:3000)  Next.js
+                         └─ /api/* ─► api:8000  (interno)          FastAPI ──► Supabase
 ```
 
 ---
 
-## 1. DNS (en hPanel de Hostinger → Dominios → DNS de connekeats.ca)
-No hay que “transferir” nada: solo apuntar a la **IP de tu VPS**.
+## 1. DNS (hPanel → Dominios → DNS de connekeats.ca)
+No hay que “transferir” nada: solo apuntar a la **IP del VPS**.
 
 | Tipo | Nombre | Valor |
 |------|--------|-------|
 | A    | `@`    | IP_DEL_VPS |
 | A    | `www`  | IP_DEL_VPS |
-| A    | `api`  | IP_DEL_VPS |
 
-(Espera unos minutos a que propague. Verifica: `ping connekeats.ca` da la IP del VPS.)
+(Verifica luego: `ping connekeats.ca` debe dar la IP del VPS.)
 
 ---
 
-## 2. Preparar el VPS (SSH)
+## 2. Preparar el VPS (SSH / Browser terminal del hPanel)
 ```bash
-ssh root@IP_DEL_VPS         # o el usuario que te dio Hostinger
+# Docker + compose (si no están)
+command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh
 
-# Docker + plugin compose (si no están)
-curl -fsSL https://get.docker.com | sh
-docker compose version      # debe imprimir una versión
-
-# Carpeta del proyecto
+# Carpeta + repos (como hermanos)
 mkdir -p /opt/connek && cd /opt/connek
-
-# Clonar los dos repos (como hermanos)
 git clone https://github.com/Connek-Inc/connekeats.ca.git
 git clone https://github.com/Connek-Inc/connekeatsbackend.git
 
-# Copiar los archivos de despliegue al nivel /opt/connek
+# Archivos de despliegue al nivel /opt/connek
 cp connekeats.ca/deploy/docker-compose.yml .
 cp connekeats.ca/deploy/Caddyfile .
 ```
@@ -48,57 +42,54 @@ cp connekeats.ca/deploy/Caddyfile .
 
 ## 3. Crear los `.env` (con TUS secretos — NO están en git)
 
+**Frontend** → `/opt/connek/connekeats.ca/.env.local` (solo valores PÚBLICOS):
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://ttqnmfueocnjkmsqrkjk.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...
+```
+> No se pone `NEXT_PUBLIC_API_URL`: por defecto usa `/api` (mismo origen). Si cambias una, reconstruye con `--build`.
+
 **Backend** → `/opt/connek/connekeatsbackend/.env`:
 ```env
 SUPABASE_URL=https://ttqnmfueocnjkmsqrkjk.supabase.co
 SUPABASE_KEY=<service-role-key>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-SUPABASE_JWT_SECRET=<jwt-secret de Supabase: Settings → API → JWT Secret>
+SUPABASE_JWT_SECRET=<jwt-secret: Supabase → Settings → API → JWT Secret>
 DINER_TOKEN_SECRET=<secreto largo: openssl rand -base64 32>
 DINER_TOKEN_TTL_MIN=180
 DINER_WEB_BASE=https://connekeats.ca
 DB_THREADPOOL_SIZE=100
-CORS_ALLOW_ALL=false
-CORS_ORIGINS=https://connekeats.ca,https://www.connekeats.ca
+CORS_ALLOW_ALL=true
 TRUSTED_HOSTS=*
 DOCS_PUBLIC=false
 ```
-
-**Frontend** → `/opt/connek/connekeats.ca/.env.local`:
-```env
-NEXT_PUBLIC_API_URL=https://api.connekeats.ca
-NEXT_PUBLIC_SUPABASE_URL=https://ttqnmfueocnjkmsqrkjk.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon / publishable key>
-```
-> ⚠️ Las `NEXT_PUBLIC_*` se hornean en el build. Si cambias una, reconstruye con `--build`.
 
 ---
 
 ## 4. Levantar
 ```bash
 cd /opt/connek
-docker compose up -d --build      # construye api + web, baja Caddy, saca HTTPS solo
-docker compose ps                 # los 3 (api, web, caddy) en "Up"
+docker compose up -d --build      # api + web + Caddy (saca HTTPS solo)
+docker compose ps                 # los 3 en "Up"
 docker compose logs -f caddy      # ver cómo obtiene el certificado
 ```
 
 ---
 
-## 5. Configurar Supabase para el dominio nuevo
-Dashboard de Supabase → **Authentication → URL Configuration**:
+## 5. Supabase para el dominio nuevo
+Dashboard → **Authentication → URL Configuration**:
 - **Site URL:** `https://connekeats.ca`
-- **Redirect URLs** (añade): `https://connekeats.ca/**`, `https://connekeats.ca/reset`
+- **Redirect URLs:** `https://connekeats.ca/**`, `https://connekeats.ca/reset`
 
-Y aplica las **migraciones pendientes** (SQL Editor) si aún no: el bloque `005→014`
-que ya tienes (incluye RH/manager `013` y tiempo real `014`).
+Y aplica las **migraciones** `005→014` (SQL Editor) si aún no.
 
 ---
 
 ## 6. Verificar
-- `https://api.connekeats.ca/health` → `{"status":"ok", ...}`
-- `https://connekeats.ca` → carga la app, login funciona.
-- Escanear un QR `https://connekeats.ca/t/<token>` → menú del comensal.
-- En el teléfono: **“Instalar app”** ya aparece (¡ahora sí, por el HTTPS!).
+- `https://connekeats.ca/api/health` → `{"status":"ok", ...}` (el proxy interno funciona).
+- `https://connekeats.ca` → carga, login funciona.
+- `https://connekeats.ca/t/<token>` → menú del comensal (QR).
+- En el teléfono: **“Instalar app”** (¡ahora sí, por el HTTPS!).
 
 ---
 
@@ -109,7 +100,6 @@ cd /opt/connek && docker compose up -d --build web # o api
 ```
 
 ## Notas
-- **Firewall:** abre puertos **80** y **443** en el VPS (Hostinger → firewall) si no lo están.
-- El backend NO copia el `.env` a la imagen (entra por `env_file`), así que el secreto
-  vive solo en el VPS, nunca en git.
-- ¿`api.connekeats.ca` no saca cert? Revisa que el DNS de `api` apunte al VPS y que 80/443 estén abiertos.
+- **Firewall:** abre puertos **80** y **443** en el VPS.
+- El backend va `expose` (interno), nunca publicado al host → no es accesible desde fuera, solo la web lo alcanza por la red de Docker.
+- Los `.env` viven solo en el VPS, nunca en git.
