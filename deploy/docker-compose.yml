@@ -1,0 +1,48 @@
+# Connek Food — stack de PRODUCCIÓN para el VPS (frontend + backend + Caddy HTTPS).
+#
+# Estructura esperada en el VPS (los dos repos clonados como hermanos):
+#   /opt/connek/
+#     ├── docker-compose.yml      (este archivo, copiado de connekeats.ca/deploy/)
+#     ├── Caddyfile               (copiado de connekeats.ca/deploy/)
+#     ├── connekeats.ca/          (git clone del frontend)  + crear su .env.local
+#     └── connekeatsbackend/      (git clone del backend)   + crear su .env
+#
+# Levantar:  docker compose up -d --build
+services:
+  api:
+    build: ./connekeatsbackend
+    env_file:
+      - ./connekeatsbackend/.env
+    restart: unless-stopped
+    expose:
+      - "8000"
+
+  web:
+    # OJO: las NEXT_PUBLIC_* se hornean en el build desde connekeats.ca/.env.local
+    # → crea ese archivo ANTES de construir. Si cambias una, reconstruye (--build).
+    build: ./connekeats.ca
+    env_file:
+      - ./connekeats.ca/.env.local
+    depends_on:
+      - api
+    restart: unless-stopped
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:

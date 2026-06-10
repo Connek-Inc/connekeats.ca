@@ -1,0 +1,13 @@
+# Connek Food — reverse proxy con HTTPS AUTOMÁTICO (Let's Encrypt).
+# Requisitos: los 3 nombres DNS apuntando a la IP del VPS + puertos 80/443 abiertos.
+# Caddy saca y renueva los certificados solo.
+
+connekeats.ca, www.connekeats.ca {
+	encode gzip zstd
+	reverse_proxy web:3000
+}
+
+api.connekeats.ca {
+	encode gzip zstd
+	reverse_proxy api:8000
+}
