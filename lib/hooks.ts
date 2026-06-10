@@ -17,8 +17,10 @@ import type {
   DeliveryStatus,
   Employee,
   Floor,
+  Invoice,
   MenuCategory,
   MenuItem,
+  OcrResult,
   Order,
   ParkingTicket,
   Review,
@@ -54,8 +56,16 @@ export function useCreateBusiness() {
 export function useUpdateBusiness(businessId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name?: string; mode?: "bar" | "restaurant"; currency?: string; features?: string[] }) =>
-      api.patch<Business>(`/businesses/${businessId}`, body),
+    mutationFn: (body: {
+      name?: string;
+      mode?: "bar" | "restaurant";
+      currency?: string;
+      features?: string[];
+      tax_rate?: number;
+      tax_id?: string;
+      legal_name?: string;
+      fiscal_address?: string;
+    }) => api.patch<Business>(`/businesses/${businessId}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["businesses"] }),
   });
 }
@@ -576,7 +586,7 @@ export function useCheckoutTable(businessId: number) {
       discount?: number;
       tip?: number;
     }) =>
-      api.post(`/businesses/${businessId}/bills/checkout`, {
+      api.post<{ ok: boolean; bill_id: number }>(`/businesses/${businessId}/bills/checkout`, {
         table_id: tableId,
         payment_method: paymentMethod ?? null,
         discount,
@@ -650,6 +660,25 @@ export function useCheckoutMulti(businessId: number) {
       qc.invalidateQueries({ queryKey: ["tables", businessId] });
       qc.invalidateQueries({ queryKey: ["orders", businessId] });
       qc.invalidateQueries({ queryKey: ["sales-summary", businessId] });
+    },
+  });
+}
+
+// ── POS Fase 4: factura fiscal + OCR ─────────────────────────────────
+export function useInvoice(businessId: number, billId: number | null) {
+  return useQuery({
+    enabled: !!billId,
+    queryKey: ["invoice", businessId, billId],
+    queryFn: () => api.get<Invoice>(`/businesses/${businessId}/bills/${billId}/invoice`),
+  });
+}
+
+export function useOcr(businessId: number) {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return api.upload<OcrResult>(`/businesses/${businessId}/ocr`, fd);
     },
   });
 }

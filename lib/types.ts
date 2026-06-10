@@ -38,7 +38,34 @@ export type Business = {
   mode: BusinessMode;
   currency: string;
   features?: string[];
+  tax_rate?: number;
+  tax_id?: string | null;
+  legal_name?: string | null;
+  fiscal_address?: string | null;
 };
+
+export type InvoiceItem = { name_snapshot: string; qty: number; price_snapshot: number };
+export type Invoice = {
+  invoice_no: string;
+  issued_at?: string | null;
+  payment_method?: string | null;
+  business: {
+    name: string | null;
+    legal_name: string | null;
+    tax_id: string | null;
+    address: string | null;
+    tax_rate: number;
+    currency: string;
+  };
+  items: InvoiceItem[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  tip: number;
+  total: number;
+};
+
+export type OcrResult = { text: string; amounts: number[]; total: number | null };
 export type Floor = { id: number; business_id: number; name: string };
 
 export type Table = {

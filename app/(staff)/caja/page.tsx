@@ -4,6 +4,7 @@ import { Button, Card, Input, Spinner } from "@heroui/react";
 import { Banknote, CreditCard, Download, Landmark, Lock, type LucideIcon, Minus, Unlock } from "lucide-react";
 import { useState } from "react";
 
+import { OcrScanner } from "@/components/OcrScanner";
 import { useBusiness } from "@/lib/business";
 import { API_URL } from "@/lib/config";
 import { useCashCurrent, useCloseCash, useOpenCash, useSalesSummary } from "@/lib/hooks";
@@ -58,6 +59,13 @@ export default function CajaPage() {
 
       {/* ── Caja / turno ── */}
       {businessId && <CashBox businessId={businessId} />}
+
+      {/* ── OCR: escanear facturas de proveedor ── */}
+      {businessId && (
+        <div className="mt-4">
+          <OcrScanner businessId={businessId} />
+        </div>
+      )}
 
       {/* ── Ventas ── */}
       <div className="mt-8 mb-2 flex items-center justify-between">

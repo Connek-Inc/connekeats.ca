@@ -701,6 +701,10 @@ function Settings({ business }: { business: Business }) {
   const { show } = useToast();
   const [name, setName] = useState(business.name);
   const [currency, setCurrency] = useState(business.currency);
+  const [taxRate, setTaxRate] = useState(business.tax_rate != null ? String(business.tax_rate) : "");
+  const [taxId, setTaxId] = useState(business.tax_id ?? "");
+  const [legalName, setLegalName] = useState(business.legal_name ?? "");
+  const [fiscalAddress, setFiscalAddress] = useState(business.fiscal_address ?? "");
 
   // Re-sincroniza al cambiar de negocio (o si el server devuelve otro valor).
   useEffect(() => {
@@ -735,6 +739,16 @@ function Settings({ business }: { business: Business }) {
       { onSuccess: saved(`Moneda: ${c}`), onError: () => { setCurrency(business.currency); failed(); } },
     );
   };
+  const saveFiscal = () =>
+    update.mutate(
+      {
+        tax_rate: Number(taxRate) || 0,
+        tax_id: taxId.trim(),
+        legal_name: legalName.trim(),
+        fiscal_address: fiscalAddress.trim(),
+      },
+      { onSuccess: saved("Datos fiscales guardados"), onError: failed },
+    );
 
   const tileOn = "border-foreground/40 bg-foreground/10";
   const tileOff = "border-foreground/10 bg-foreground/[0.03] opacity-60";
@@ -754,6 +768,20 @@ function Settings({ business }: { business: Business }) {
             Guardar
           </Button>
         </div>
+      </div>
+
+      {/* Datos fiscales (factura) */}
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-medium text-foreground/70">Datos fiscales (para la factura)</label>
+        <div className="grid grid-cols-2 gap-2">
+          <Input value={taxRate} onChange={(e) => setTaxRate(e.target.value)} type="number" placeholder="Impuesto % (GST/HST)" />
+          <Input value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder="N° fiscal" />
+        </div>
+        <Input fullWidth value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Razón social (opcional)" />
+        <Input fullWidth value={fiscalAddress} onChange={(e) => setFiscalAddress(e.target.value)} placeholder="Dirección fiscal (opcional)" />
+        <Button variant="secondary" isDisabled={update.isPending} onPress={saveFiscal}>
+          Guardar datos fiscales
+        </Button>
       </div>
 
       {/* Tipo de negocio */}

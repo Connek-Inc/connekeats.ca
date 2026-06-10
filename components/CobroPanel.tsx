@@ -4,7 +4,8 @@
 //   • Dividir       → pagos parciales: partes iguales (entre N) o por ítem
 //   • Varias mesas  → un cliente paga varias mesas de una (checkout-multi)
 import { Button, Card, Spinner } from "@heroui/react";
-import { Banknote, CreditCard, Landmark, type LucideIcon, Users } from "lucide-react";
+import { Banknote, CreditCard, FileText, Landmark, type LucideIcon, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useAddPayment, useBillDetail, useCheckoutMulti, useCheckoutTable, useOpenBill } from "@/lib/hooks";
@@ -55,6 +56,7 @@ export function CobroPanel({
   onDone: () => void;
 }) {
   const { show } = useToast();
+  const router = useRouter();
   const [mode, setMode] = useState<"full" | "split" | "multi">("full");
 
   const checkout = useCheckoutTable(businessId);
@@ -68,9 +70,10 @@ export function CobroPanel({
   const fullTotal = Math.max(0, orderTotal - (Number(discount) || 0) + (Number(tip) || 0));
   async function cobrarFull(method: string) {
     try {
-      await checkout.mutateAsync({ tableId, paymentMethod: method, discount: Number(discount) || 0, tip: Number(tip) || 0 });
+      const r = await checkout.mutateAsync({ tableId, paymentMethod: method, discount: Number(discount) || 0, tip: Number(tip) || 0 });
       show(`Mesa cobrada · ${money(fullTotal)}`, "success");
       onDone();
+      if (r?.bill_id) router.push(`/factura/${r.bill_id}`);
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo cobrar", "error");
     }
@@ -196,6 +199,9 @@ export function CobroPanel({
                 <span className="text-foreground/60">Total {money(total)} · Pagado {money(detail.data?.paid ?? 0)}</span>
                 <span className="font-bold text-foreground">Faltan {money(remaining)}</span>
               </div>
+              <button type="button" onClick={() => router.push(`/factura/${billId}`)} className="flex items-center justify-center gap-1.5 text-xs text-foreground/55 transition hover:text-foreground">
+                <FileText className="size-3.5" /> Ver factura
+              </button>
               <div className="flex gap-1.5">
                 <button type="button" onClick={() => setSplitMode("equal")} className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold ${splitMode === "equal" ? "bg-foreground text-background" : "bg-foreground/[0.06] text-foreground/60"}`}>
                   Partes iguales
