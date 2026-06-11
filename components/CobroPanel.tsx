@@ -8,7 +8,7 @@ import { Banknote, CheckCircle2, CreditCard, FileText, Landmark, type LucideIcon
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { useAddPayment, useBillDetail, useCheckoutMulti, useCheckoutTable, useOpenBill } from "@/lib/hooks";
+import { useAddPayment, useBillDetail, useBusinesses, useCheckoutMulti, useCheckoutTable, useOpenBill } from "@/lib/hooks";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
 
@@ -66,10 +66,22 @@ export function CobroPanel({
   const addPayment = useAddPayment(businessId);
   const checkoutMulti = useCheckoutMulti(businessId);
 
-  // ── Toda la mesa: descuento + propina ──
+  // ── Toda la mesa: descuento + propina + impuesto ──
   const [discount, setDiscount] = useState("");
   const [tip, setTip] = useState("");
-  const fullTotal = Math.max(0, orderTotal - (Number(discount) || 0) + (Number(tip) || 0));
+  const businesses = useBusinesses();
+  const biz = businesses.data?.find((b) => b.id === businessId);
+  const taxComps = biz?.tax_components ?? [];
+  const addsTax = taxComps.length > 0 && !biz?.prices_include_tax;
+  const round2 = (n: number) => Math.round((n + 1e-9) * 100) / 100; // half-up (paridad con Decimal del backend)
+  const taxRateSum = taxComps.reduce((s, c) => s + Number(c.rate), 0);
+  const grossFactor = addsTax ? 1 + taxRateSum / 100 : 1; // para gross-up de "por ítem" / "varias mesas"
+  const baseAfterDisc = Math.max(0, orderTotal - (Number(discount) || 0));
+  const taxLines = addsTax
+    ? taxComps.map((c) => ({ name: c.name, rate: c.rate, amount: round2((baseAfterDisc * Number(c.rate)) / 100) }))
+    : [];
+  const taxTotal = round2(taxLines.reduce((s, l) => s + l.amount, 0));
+  const fullTotal = round2(baseAfterDisc + taxTotal + (Number(tip) || 0));
   async function cobrarFull(method: string) {
     try {
       const r = await checkout.mutateAsync({ tableId, paymentMethod: method, discount: Number(discount) || 0, tip: Number(tip) || 0 });
@@ -92,6 +104,7 @@ export function CobroPanel({
   const nParts = Math.max(1, Math.floor(Number(parts) || 1));
   const perPart = Math.min(remaining, Math.round((total / nParts) * 100) / 100);
   const selSum = items.filter((it) => sel.has(it.id)).reduce((s, it) => s + it.price_snapshot * it.qty, 0);
+  const selGross = round2(selSum * grossFactor); // con impuesto, para que los pagos por ítem salden la cuenta
 
   function startSplit() {
     openBill.mutate(tableId, {
@@ -117,7 +130,9 @@ export function CobroPanel({
 
   // ── Varias mesas ──
   const [selTables, setSelTables] = useState<Set<number>>(new Set());
-  const multiTotal = orderTotal + otherTables.filter((t) => selTables.has(t.id)).reduce((s, t) => s + t.total, 0);
+  const multiTotal = round2(
+    (orderTotal + otherTables.filter((t) => selTables.has(t.id)).reduce((s, t) => s + t.total, 0)) * grossFactor,
+  );
   async function cobrarMulti(method: string) {
     try {
       const r = await checkoutMulti.mutateAsync({ tableIds: [tableId, ...selTables], paymentMethod: method });
@@ -204,6 +219,12 @@ export function CobroPanel({
                 <input type="number" inputMode="decimal" value={tip} onChange={(e) => setTip(e.target.value)} placeholder="0" className="w-20 rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1 text-right text-foreground outline-none" />
               </span>
             </label>
+            {taxLines.map((l, i) => (
+              <div key={i} className="flex justify-between text-foreground/60">
+                <span>{l.name} ({Number(l.rate)}%)</span>
+                <span className="text-foreground/80">{money(l.amount)}</span>
+              </div>
+            ))}
             <div className="flex justify-between border-t border-foreground/10 pt-2 font-bold text-foreground">
               <span>Total</span>
               <span>{money(fullTotal)}</span>
@@ -277,8 +298,8 @@ export function CobroPanel({
                   {selSum > 0 && (
                     <Pay
                       pending={addPayment.isPending}
-                      label={`Cobrar selección (${money(selSum)})`}
-                      onPay={(m) => pay(selSum, m, items.filter((it) => sel.has(it.id)).map((it) => it.name_snapshot).join(", "))}
+                      label={`Cobrar selección (${money(selGross)})`}
+                      onPay={(m) => pay(selGross, m, items.filter((it) => sel.has(it.id)).map((it) => it.name_snapshot).join(", "))}
                     />
                   )}
                 </div>

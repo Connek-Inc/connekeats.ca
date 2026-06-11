@@ -70,7 +70,7 @@ import { MODULES } from "@/lib/modules";
 import { supabase } from "@/lib/supabase";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
-import type { Business, Employee, MenuCategory, MenuItem } from "@/lib/types";
+import type { Business, Employee, MenuCategory, MenuItem, TaxComponent } from "@/lib/types";
 
 export default function OwnerPage() {
   const { businessId } = useBusiness();
@@ -904,6 +904,115 @@ function BrandSettings({ business }: { business: Business }) {
   );
 }
 
+// Presets de impuestos por provincia canadiense (el dueño puede editar).
+const PROVINCE_TAX: Record<string, { name: string; rate: number }[]> = {
+  QC: [{ name: "TPS/GST", rate: 5 }, { name: "TVQ/QST", rate: 9.975 }],
+  ON: [{ name: "HST", rate: 13 }],
+  NB: [{ name: "HST", rate: 13 }],
+  NL: [{ name: "HST", rate: 13 }],
+  NS: [{ name: "HST", rate: 14 }],
+  PE: [{ name: "HST", rate: 15 }],
+  BC: [{ name: "GST", rate: 5 }, { name: "PST", rate: 7 }],
+  SK: [{ name: "GST", rate: 5 }, { name: "PST", rate: 6 }],
+  MB: [{ name: "GST", rate: 5 }, { name: "RST", rate: 7 }],
+  AB: [{ name: "GST", rate: 5 }],
+  NT: [{ name: "GST", rate: 5 }],
+  YT: [{ name: "GST", rate: 5 }],
+  NU: [{ name: "GST", rate: 5 }],
+};
+const PROVINCE_LABEL: Record<string, string> = {
+  QC: "Québec (GST + QST)", ON: "Ontario (HST 13%)", NB: "New Brunswick (HST 13%)",
+  NL: "Terranova (HST 13%)", NS: "Nueva Escocia (HST 14%)", PE: "PEI (HST 15%)",
+  BC: "Columbia Británica (GST + PST)", SK: "Saskatchewan (GST + PST)", MB: "Manitoba (GST + RST)",
+  AB: "Alberta (GST 5%)", NT: "NWT (GST 5%)", YT: "Yukón (GST 5%)", NU: "Nunavut (GST 5%)",
+};
+
+// Impuestos canadienses por COMPONENTES (Québec = GST + QST en líneas separadas).
+function TaxSettings({ business }: { business: Business }) {
+  const update = useUpdateBusiness(business.id);
+  const { show } = useToast();
+  const [province, setProvince] = useState(business.province || "");
+  const [comps, setComps] = useState<TaxComponent[]>(business.tax_components ?? []);
+  const [inclusive, setInclusive] = useState(!!business.prices_include_tax);
+
+  useEffect(() => {
+    setProvince(business.province || "");
+    setComps(business.tax_components ?? []);
+    setInclusive(!!business.prices_include_tax);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business.id]);
+
+  const pickProvince = (p: string) => {
+    setProvince(p);
+    const preset = PROVINCE_TAX[p];
+    if (preset) setComps(preset.map((c) => ({ ...c, number: comps.find((x) => x.name === c.name)?.number ?? "" })));
+  };
+  const setComp = (i: number, patch: Partial<TaxComponent>) =>
+    setComps((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+  const save = () => {
+    const clean = comps
+      .filter((c) => (c.name || "").trim() && Number(c.rate) > 0)
+      .map((c) => ({ name: c.name.trim(), rate: Number(c.rate), number: (c.number || "").toString().trim() || null }));
+    update.mutate(
+      { province: province || undefined, tax_components: clean, prices_include_tax: inclusive },
+      { onSuccess: () => show("Impuestos guardados", "success"), onError: () => show("No se pudo guardar", "error") },
+    );
+  };
+
+  const totalRate = comps.reduce((s, c) => s + (Number(c.rate) || 0), 0);
+  const inputCls = "rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1.5 text-sm text-foreground outline-none";
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/70">
+        <FileText className="size-4" /> Impuestos (Canadá)
+      </label>
+      <select value={province} onChange={(e) => pickProvince(e.target.value)} className={`w-full ${inputCls}`} aria-label="Provincia">
+        <option value="">— Elegir provincia (autocompleta) —</option>
+        {Object.keys(PROVINCE_TAX).map((p) => (
+          <option key={p} value={p}>{PROVINCE_LABEL[p]}</option>
+        ))}
+      </select>
+      {(province === "BC" || province === "SK") && (
+        <p className="text-[11px] text-foreground/45">En {province} las comidas de restaurante suelen estar exentas de PST — quítalo si aplica a tus ítems.</p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {comps.map((c, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input value={c.name} onChange={(e) => setComp(i, { name: e.target.value })} placeholder="GST" className={`w-20 ${inputCls}`} aria-label="Nombre del impuesto" />
+            <span className="flex items-center gap-1">
+              <input type="number" step="0.001" value={c.rate} onChange={(e) => setComp(i, { rate: Number(e.target.value) })} className={`w-16 text-right ${inputCls}`} aria-label="Tasa %" />
+              <span className="text-foreground/50">%</span>
+            </span>
+            <input value={c.number ?? ""} onChange={(e) => setComp(i, { number: e.target.value })} placeholder="N° de registro" className={`min-w-0 flex-1 ${inputCls}`} aria-label="Número de registro" />
+            <button type="button" onClick={() => setComps((cs) => cs.filter((_, j) => j !== i))} aria-label="Quitar impuesto" className="shrink-0 text-foreground/40 transition hover:text-foreground">
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        ))}
+        <button type="button" onClick={() => setComps((cs) => [...cs, { name: "", rate: 0, number: "" }])} className="self-start text-xs text-foreground/60 transition hover:text-foreground">
+          + Añadir impuesto
+        </button>
+      </div>
+
+      <label className="flex items-center gap-2">
+        <Toggle on={inclusive} onToggle={() => setInclusive((v) => !v)} label="Los precios incluyen impuesto" />
+        <span className="text-sm text-foreground/70">Los precios del menú ya incluyen impuesto</span>
+      </label>
+      <p className="text-[11px] text-foreground/40">
+        {inclusive
+          ? "El impuesto se desglosa a partir del precio en la factura."
+          : "El impuesto se suma por encima al cobrar (estándar canadiense)."}{" "}
+        Total: {Number(totalRate.toFixed(3))}%.
+      </p>
+      <Button variant="secondary" isDisabled={update.isPending} onPress={save}>
+        Guardar impuestos
+      </Button>
+    </div>
+  );
+}
+
 // Configuración del negocio: nombre, tipo (bar/restaurante), moneda y módulos.
 // Cada cambio se guarda al instante (PATCH); el nombre tiene botón Guardar.
 function Settings({ business }: { business: Business }) {
@@ -911,7 +1020,6 @@ function Settings({ business }: { business: Business }) {
   const { show } = useToast();
   const [name, setName] = useState(business.name);
   const [currency, setCurrency] = useState(business.currency);
-  const [taxRate, setTaxRate] = useState(business.tax_rate != null ? String(business.tax_rate) : "");
   const [taxId, setTaxId] = useState(business.tax_id ?? "");
   const [legalName, setLegalName] = useState(business.legal_name ?? "");
   const [fiscalAddress, setFiscalAddress] = useState(business.fiscal_address ?? "");
@@ -952,7 +1060,6 @@ function Settings({ business }: { business: Business }) {
   const saveFiscal = () =>
     update.mutate(
       {
-        tax_rate: Number(taxRate) || 0,
         tax_id: taxId.trim(),
         legal_name: legalName.trim(),
         fiscal_address: fiscalAddress.trim(),
@@ -986,16 +1093,16 @@ function Settings({ business }: { business: Business }) {
       {/* Datos fiscales (factura) */}
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-foreground/70">Datos fiscales (para la factura)</label>
-        <div className="grid grid-cols-2 gap-2">
-          <Input value={taxRate} onChange={(e) => setTaxRate(e.target.value)} type="number" placeholder="Impuesto % (GST/HST)" />
-          <Input value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder="N° fiscal" />
-        </div>
+        <Input fullWidth value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder="N° fiscal del negocio (opcional)" />
         <Input fullWidth value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Razón social (opcional)" />
         <Input fullWidth value={fiscalAddress} onChange={(e) => setFiscalAddress(e.target.value)} placeholder="Dirección fiscal (opcional)" />
         <Button variant="secondary" isDisabled={update.isPending} onPress={saveFiscal}>
           Guardar datos fiscales
         </Button>
       </div>
+
+      {/* Impuestos (Canadá): GST/HST/QST/PST por componentes */}
+      <TaxSettings business={business} />
 
       {/* Tipo de negocio */}
       <div className="flex flex-col gap-1.5">

@@ -65,6 +65,10 @@ export function useUpdateBusiness(businessId: number) {
       tax_id?: string;
       legal_name?: string;
       fiscal_address?: string;
+      // Motor de impuestos (GST/HST/QST/PST)
+      province?: string;
+      tax_components?: { name: string; rate: number; number?: string | null }[];
+      prices_include_tax?: boolean;
       // Marca / white-label ("" = restablecer)
       logo_url?: string;
       brand_primary?: string;

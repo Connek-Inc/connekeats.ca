@@ -62,6 +62,13 @@ export default function FacturaPage() {
               <UtensilsCrossed className="size-5" /> {b.legal_name || b.name || "Negocio"}
             </p>
             {b.tax_id && <p className="text-xs text-neutral-500">N° fiscal: {b.tax_id}</p>}
+            {b.tax_components
+              ?.filter((c) => c.number)
+              .map((c, i) => (
+                <p key={i} className="text-xs text-neutral-500">
+                  {c.name}: {c.number}
+                </p>
+              ))}
             {b.address && <p className="text-xs text-neutral-500">{b.address}</p>}
           </div>
           <div className="text-right">
@@ -97,7 +104,17 @@ export default function FacturaPage() {
         <div className="ml-auto flex w-56 flex-col gap-1 text-sm">
           <Row label={t("inv.subtotal")} value={money(d.subtotal)} />
           {d.discount > 0 && <Row label={t("inv.discount")} value={`- ${money(d.discount)}`} />}
-          <Row label={`${t("inv.tax")} (${b.tax_rate}% incl.)`} value={money(d.tax)} />
+          {d.tax_breakdown && d.tax_breakdown.length > 0 ? (
+            <>
+              {/* Línea de igualdad antes de impuestos (formato Revenu Québec) */}
+              <div className="border-t border-neutral-300" />
+              {d.tax_breakdown.map((c, i) => (
+                <Row key={i} label={`${c.name} (${c.rate}%)`} value={money(c.amount)} />
+              ))}
+            </>
+          ) : d.tax > 0 ? (
+            <Row label={`${t("inv.tax")} (${b.tax_rate}%)`} value={money(d.tax)} />
+          ) : null}
           {d.tip > 0 && <Row label={t("inv.tip")} value={money(d.tip)} />}
           <div className="mt-1 flex justify-between border-t border-neutral-300 pt-2 text-base font-bold">
             <span>{t("inv.total").toUpperCase()}</span>

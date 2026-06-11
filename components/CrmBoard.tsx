@@ -344,6 +344,19 @@ function CustomerSheet({ businessId, customerId, onClose }: { businessId: number
   );
   const favTop = Object.entries(fav).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
+  // Portabilidad (Loi 25): descarga TODOS los datos del cliente en JSON estructurado.
+  const exportJson = () => {
+    if (!d) return;
+    const payload = { exported_at: new Date().toISOString(), customer: c, stats: d.stats, orders: d.orders };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cliente-${customerId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
@@ -413,12 +426,22 @@ function CustomerSheet({ businessId, customerId, onClose }: { businessId: number
               )}
             </div>
 
-            <button
-              onClick={() => del.mutate(customerId, { onSuccess: onClose, onError: () => show("No se pudo eliminar", "error") })}
-              className="self-start text-sm text-foreground/50 transition hover:text-foreground"
-            >
-              Eliminar cliente
-            </button>
+            {/* Derechos del titular (Loi 25): portabilidad (exportar) + olvido (eliminar) */}
+            <div className="flex flex-wrap items-center gap-4 border-t border-foreground/10 pt-3">
+              <span className="text-[11px] uppercase tracking-wide text-foreground/40">Privacidad</span>
+              <button onClick={exportJson} className="text-sm text-foreground/60 transition hover:text-foreground">
+                Exportar datos (JSON)
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("¿Eliminar definitivamente los datos de este cliente? (derecho al olvido)"))
+                    del.mutate(customerId, { onSuccess: onClose, onError: () => show("No se pudo eliminar", "error") });
+                }}
+                className="text-sm text-foreground/50 transition hover:text-foreground"
+              >
+                Eliminar (derecho al olvido)
+              </button>
+            </div>
           </div>
         )}
       </div>

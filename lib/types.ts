@@ -32,6 +32,8 @@ export type Employee = {
   notes: string | null;
 };
 
+export type TaxComponent = { name: string; rate: number; number?: string | null };
+
 export type Business = {
   id: number;
   name: string;
@@ -42,6 +44,10 @@ export type Business = {
   tax_id?: string | null;
   legal_name?: string | null;
   fiscal_address?: string | null;
+  // Motor de impuestos canadiense (GST/HST/QST/PST por componentes)
+  province?: string | null;
+  tax_components?: TaxComponent[] | null;
+  prices_include_tax?: boolean | null;
   // Marca / white-label
   logo_url?: string | null;
   brand_primary?: string | null;
@@ -62,12 +68,15 @@ export type Invoice = {
     tax_id: string | null;
     address: string | null;
     tax_rate: number;
+    province?: string | null;
+    tax_components?: TaxComponent[];
     currency: string;
   };
   items: InvoiceItem[];
   subtotal: number;
   discount: number;
   tax: number;
+  tax_breakdown?: { name: string; rate: number; number?: string | null; amount: number }[];
   tip: number;
   total: number;
 };
