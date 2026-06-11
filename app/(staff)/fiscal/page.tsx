@@ -5,7 +5,7 @@
 // crédito / anula, y revisa el log de auditoría.
 
 import { Button, Card, Input, Spinner } from "@heroui/react";
-import { AlertTriangle, ArrowLeft, Ban, FileText, Printer, RefreshCw, ScrollText, Send } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Ban, Copy, FileText, Printer, RefreshCw, ScrollText, Send } from "lucide-react";
 import { useState } from "react";
 
 import { useBusiness } from "@/lib/business";
@@ -14,10 +14,12 @@ import {
   useCancelFiscal,
   useFiscalAudit,
   useFiscalCreditNote,
+  useFiscalDuplicate,
   useFiscalFromBill,
   useFiscalInvoice,
   useFiscalList,
   useFiscalPending,
+  useRetryPending,
   useTransmitFiscal,
 } from "@/lib/hooks";
 import { useToast } from "@/lib/toast";
@@ -56,6 +58,7 @@ export default function FiscalPage() {
   const bills = useBills(businessId);
   const fromBill = useFiscalFromBill(businessId ?? 0);
   const transmit = useTransmitFiscal(businessId ?? 0);
+  const retryAll = useRetryPending(businessId ?? 0);
   const [selected, setSelected] = useState<number | null>(null);
 
   if (selected != null && businessId) {
@@ -116,9 +119,27 @@ export default function FiscalPage() {
       {/* Cola de pendientes */}
       {(pending.data?.length ?? 0) > 0 && (
         <section className="mb-6">
-          <p className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wide text-amber-500">
-            <RefreshCw className="size-3.5" /> Pendientes de transmisión ({pending.data!.length})
-          </p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-amber-500">
+              <RefreshCw className="size-3.5" /> Pendientes de transmisión ({pending.data!.length})
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="rounded-full"
+              isDisabled={retryAll.isPending}
+              onPress={() =>
+                retryAll.mutate(undefined, {
+                  onSuccess: (r) => show(`Reintentadas ${r?.attempted ?? 0} (SEV no certificado, en cola)`, "info"),
+                  onError: () => show("No se pudo reintentar", "error"),
+                })
+              }
+            >
+              <span className="flex items-center gap-1">
+                <RefreshCw className="size-3.5" /> Reintentar todo
+              </span>
+            </Button>
+          </div>
           <Card className="glass flex flex-col gap-1.5 rounded-3xl p-4">
             {pending.data!.map((t) => (
               <div key={t.id} className="flex items-center justify-between text-sm">
@@ -189,6 +210,7 @@ function Detail({ businessId, txnId, onBack }: { businessId: number; txnId: numb
   const transmit = useTransmitFiscal(businessId);
   const creditNote = useFiscalCreditNote(businessId);
   const cancel = useCancelFiscal(businessId);
+  const duplicate = useFiscalDuplicate(businessId);
   const { show } = useToast();
   const d = inv.data;
 
@@ -258,6 +280,13 @@ function Detail({ businessId, txnId, onBack }: { businessId: number; txnId: numb
                 <Line label="TOTAL" value={money(d.total)} bold />
               </div>
               <Line label="Mode de paiement" value={d.payment_method || "—"} />
+              {(d.payments?.length ?? 0) > 1 &&
+                d.payments!.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between pl-3 text-[11px] text-black/55">
+                    <span>· {p.method || "—"}</span>
+                    <span className="font-mono tabular-nums">{money(p.amount)}</span>
+                  </div>
+                ))}
             </div>
 
             {/* Código QR fiscal + mención (placeholder hasta certificación) */}
@@ -275,7 +304,7 @@ function Detail({ businessId, txnId, onBack }: { businessId: number; txnId: numb
           </Card>
 
           {/* Acciones fiscales */}
-          <div className="mt-4 grid grid-cols-3 gap-2 print:hidden">
+          <div className="mt-4 grid grid-cols-2 gap-2 print:hidden">
             <Button
               variant="primary"
               isDisabled={transmit.isPending}
@@ -318,6 +347,20 @@ function Detail({ businessId, txnId, onBack }: { businessId: number; txnId: numb
             >
               <span className="flex items-center justify-center gap-1">
                 <Ban className="size-4" /> Anular
+              </span>
+            </Button>
+            <Button
+              variant="secondary"
+              isDisabled={duplicate.isPending}
+              onPress={() =>
+                duplicate.mutate(txnId, {
+                  onSuccess: () => show("Duplicata generado", "success"),
+                  onError: (e) => show(e instanceof Error ? e.message : "Error", "error"),
+                })
+              }
+            >
+              <span className="flex items-center justify-center gap-1">
+                <Copy className="size-4" /> Duplicata
               </span>
             </Button>
           </div>

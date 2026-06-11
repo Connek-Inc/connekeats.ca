@@ -932,6 +932,25 @@ export function useCancelFiscal(businessId: number) {
   });
 }
 
+export function useFiscalDuplicate(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (txnId: number) => api.post(`/businesses/${businessId}/fiscal/${txnId}/duplicate`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fiscal", businessId] }),
+  });
+}
+
+export function useRetryPending(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ attempted: number }>(`/businesses/${businessId}/fiscal/retry-pending`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fiscal", businessId] });
+      qc.invalidateQueries({ queryKey: ["fiscal-pending", businessId] });
+    },
+  });
+}
+
 // ── Equipo / staff ──────────────────────────────────────────────────
 // Cambia el rol de un miembro (mesero ↔ cocina). El backend conserva la zona.
 export function useChangeStaffRole(businessId: number) {

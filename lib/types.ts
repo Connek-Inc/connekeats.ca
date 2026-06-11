@@ -419,8 +419,10 @@ export type FiscalInvoice = {
   tps: number;
   tvq: number;
   tip: number;
+  service_charge?: number;
   total: number;
   payment_method: string | null;
+  payments?: { method: string | null; amount: number }[];
   currency: string;
   mev_transaction_no: string | null;
   mev_qr_payload: string | null;
