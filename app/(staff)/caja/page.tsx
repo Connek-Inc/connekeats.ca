@@ -1,7 +1,8 @@
 "use client";
 
 import { Button, Card, Input, Spinner } from "@heroui/react";
-import { Banknote, CreditCard, Download, Landmark, Lock, type LucideIcon, Minus, Plus, Trash2, TrendingDown, TrendingUp, Unlock } from "lucide-react";
+import { Banknote, CreditCard, Download, FileText, Landmark, Lock, type LucideIcon, Minus, Plus, Trash2, TrendingDown, TrendingUp, Unlock } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { OcrScanner } from "@/components/OcrScanner";
@@ -53,8 +54,14 @@ export default function CajaPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-8">
-      <header className="mb-6">
+      <header className="mb-6 flex items-center justify-between gap-2">
         <h1 className="text-2xl font-bold text-foreground">Caja &amp; Reportes</h1>
+        <Link
+          href="/fiscal"
+          className="flex shrink-0 items-center gap-1 rounded-full border border-foreground/15 px-3 py-1.5 text-xs text-foreground/70 transition hover:text-foreground"
+        >
+          <FileText className="size-3.5" /> Facturación fiscal
+        </Link>
       </header>
 
       {/* ── Caja / turno ── */}

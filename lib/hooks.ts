@@ -16,6 +16,9 @@ import type {
   DeliveryOrder,
   DeliveryStatus,
   Employee,
+  FiscalAuditEntry,
+  FiscalInvoice,
+  FiscalTransaction,
   Floor,
   Invoice,
   LedgerEntry,
@@ -853,6 +856,79 @@ export function useDeleteStock(businessId: number) {
   return useMutation({
     mutationFn: (id: number) => api.del(`/businesses/${businessId}/stock/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["stock", businessId] }),
+  });
+}
+
+// ── Motor fiscal (SEV/MEV-WEB) ──
+export function useFiscalList(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["fiscal", businessId],
+    queryFn: () => api.get<{ transactions: FiscalTransaction[] }>(`/businesses/${businessId}/fiscal`).then((r) => r.transactions),
+  });
+}
+
+export function useFiscalPending(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["fiscal-pending", businessId],
+    queryFn: () => api.get<{ transactions: FiscalTransaction[] }>(`/businesses/${businessId}/fiscal/pending`).then((r) => r.transactions),
+  });
+}
+
+export function useFiscalInvoice(businessId: number | null, txnId: number | null) {
+  return useQuery({
+    enabled: !!businessId && !!txnId,
+    queryKey: ["fiscal-invoice", businessId, txnId],
+    queryFn: () => api.get<FiscalInvoice>(`/businesses/${businessId}/fiscal/${txnId}/invoice`),
+  });
+}
+
+export function useFiscalAudit(businessId: number | null, txnId: number | null) {
+  return useQuery({
+    enabled: !!businessId && !!txnId,
+    queryKey: ["fiscal-audit", businessId, txnId],
+    queryFn: () => api.get<{ log: FiscalAuditEntry[] }>(`/businesses/${businessId}/fiscal/${txnId}/audit`).then((r) => r.log),
+  });
+}
+
+export function useFiscalFromBill(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (billId: number) => api.post<FiscalTransaction>(`/businesses/${businessId}/fiscal/from-bill/${billId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fiscal", businessId] });
+      qc.invalidateQueries({ queryKey: ["fiscal-pending", businessId] });
+    },
+  });
+}
+
+export function useTransmitFiscal(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (txnId: number) => api.post<{ ok: boolean; error?: string }>(`/businesses/${businessId}/fiscal/${txnId}/transmit`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fiscal", businessId] });
+      qc.invalidateQueries({ queryKey: ["fiscal-pending", businessId] });
+    },
+  });
+}
+
+export function useFiscalCreditNote(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ txnId, reason }: { txnId: number; reason?: string }) =>
+      api.post(`/businesses/${businessId}/fiscal/${txnId}/credit-note`, { reason }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fiscal", businessId] }),
+  });
+}
+
+export function useCancelFiscal(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ txnId, reason }: { txnId: number; reason?: string }) =>
+      api.post(`/businesses/${businessId}/fiscal/${txnId}/cancel`, { reason }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fiscal", businessId] }),
   });
 }
 

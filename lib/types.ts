@@ -351,6 +351,93 @@ export type StockItem = {
   note: string | null;
 };
 
+// ── Motor fiscal (SEV/MEV-WEB) ──
+export type FiscalDocType =
+  | "facture"
+  | "note_credit"
+  | "annulation"
+  | "duplicata"
+  | "correction"
+  | "addition"
+  | "fermeture";
+
+export type FiscalItem = {
+  item_id?: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  discount: number;
+  taxes_applicable?: string[];
+  tax_codes?: string[]; // F / P / S
+  modifiers?: string[];
+  line_total?: number;
+};
+
+export type FiscalTransaction = {
+  id: number;
+  business_id: number;
+  bill_id: number | null;
+  transaction_no: string;
+  doc_type: FiscalDocType;
+  status: string;
+  order_type: string | null;
+  table_label: string | null;
+  establishment_name: string | null;
+  establishment_address: string | null;
+  tps_number: string | null;
+  tvq_number: string | null;
+  items: FiscalItem[];
+  subtotal: number;
+  discount: number;
+  tps: number;
+  tvq: number;
+  tip: number;
+  total: number;
+  payment_method: string | null;
+  mev_transaction_no: string | null;
+  transmitted_at: string | null;
+  environment: string;
+  retry_count: number;
+  last_error: string | null;
+  created_at: string;
+};
+
+export type FiscalInvoice = {
+  establishment_name: string | null;
+  establishment_address: string | null;
+  tps_number: string | null;
+  tvq_number: string | null;
+  transaction_no: string;
+  doc_type: string;
+  table_label: string | null;
+  order_type: string | null;
+  moment_transmission: string;
+  numero_transaction: string;
+  items: FiscalItem[];
+  subtotal: number;
+  discount: number;
+  tps: number;
+  tvq: number;
+  tip: number;
+  total: number;
+  payment_method: string | null;
+  currency: string;
+  mev_transaction_no: string | null;
+  mev_qr_payload: string | null;
+  mention: string;
+  certified: boolean;
+};
+
+export type FiscalAuditEntry = {
+  id: number;
+  created_at: string;
+  action: string;
+  prev_value: unknown;
+  new_value: unknown;
+  fiscal_status: string | null;
+  user_id: string | null;
+};
+
 // ── Seed / onboarding (espejo de database/models.py SeedRequest) ──
 export type SeedItemInput = {
   name: string;
