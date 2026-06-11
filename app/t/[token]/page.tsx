@@ -2,16 +2,17 @@
 // Experiencia del comensal por QR (web pública, sin login). Opera con el token
 // efímero de mesa contra /diner/*. Construida con HeroUI v3 (dark/glass).
 import { Button, Card, Spinner } from "@heroui/react";
-import { ArrowLeft, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minus, Play, Plus, Star, Unplug, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minus, Play, Plus, Star, Unplug, UtensilsCrossed, Wine } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LangSwitcher } from "@/components/LangSwitcher";
 import { api } from "@/lib/api";
 import { BrandStyle } from "@/lib/brand";
-import { useT } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import { presetFor } from "@/lib/modePresets";
 import { ensureNotifyPermission, useNotifier } from "@/lib/notify";
+import { TERMS } from "@/lib/termsOfService";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
 import type { DinerSession, MenuCategory, MenuItem, Order } from "@/lib/types";
@@ -20,6 +21,7 @@ export default function DinerTablePage() {
   const { token: qrToken } = useParams<{ token: string }>();
   const { show } = useToast();
   const t = useT();
+  const { locale } = useLocale();
 
   const [session, setSession] = useState<DinerSession | null>(null);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -343,7 +345,14 @@ export default function DinerTablePage() {
 
       {/* Barra de envío flotante */}
       {cartLines.length > 0 && (
-        <div className="safe-pb fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-xl px-5 pt-2">
+        <div className="safe-pb fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-xl bg-gradient-to-t from-background via-background/95 to-transparent px-5 pb-1 pt-3">
+          {/* Disclosure de contrato a distancia (Loi sur la protection du consommateur, P-40.1) */}
+          <p className="mb-1.5 px-1 text-center text-[10px] leading-tight text-foreground/45">
+            {TERMS.disclosure[locale]}{" "}
+            <a href="/terms" target="_blank" rel="noopener" className="underline">
+              {TERMS.link[locale]}
+            </a>
+          </p>
           <Button variant="primary" size="lg" fullWidth isDisabled={sending} onPress={sendOrder}>
             {sending ? <Spinner color="current" size="sm" /> : `${t("diner.sendOrder")} · $${cartTotal.toFixed(2)}`}
           </Button>
@@ -468,6 +477,11 @@ function ItemCard({
         {it.video_url ? (
           <span className="absolute left-2 top-2 grid size-6 place-items-center rounded-full bg-black/55 text-white">
             <Play className="size-3.5" />
+          </span>
+        ) : null}
+        {it.is_alcohol ? (
+          <span className="absolute right-2 top-2 flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
+            <Wine className="size-3" /> 18+
           </span>
         ) : null}
         {qty > 0 ? (

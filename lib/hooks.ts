@@ -69,6 +69,9 @@ export function useUpdateBusiness(businessId: number) {
       province?: string;
       tax_components?: { name: string; rate: number; number?: string | null }[];
       prices_include_tax?: boolean;
+      // Alcohol (RACJ)
+      liquor_permit?: string;
+      liquor_category?: string;
       // Marca / white-label ("" = restablecer)
       logo_url?: string;
       brand_primary?: string;
@@ -234,7 +237,7 @@ export function useCreateMenuItem(businessId: number) {
 }
 
 type MenuItemPatch = Partial<
-  Pick<MenuItem, "name" | "price" | "available" | "description" | "available_in" | "category_id" | "station" | "featured">
+  Pick<MenuItem, "name" | "price" | "available" | "description" | "available_in" | "category_id" | "station" | "featured" | "is_alcohol">
 >;
 
 export function useUpdateMenuItem(businessId: number) {

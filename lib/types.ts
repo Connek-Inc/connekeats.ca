@@ -48,6 +48,9 @@ export type Business = {
   province?: string | null;
   tax_components?: TaxComponent[] | null;
   prices_include_tax?: boolean | null;
+  // Alcohol (Québec RACJ)
+  liquor_permit?: string | null;
+  liquor_category?: "bar" | "restaurant" | null;
   // Marca / white-label
   logo_url?: string | null;
   brand_primary?: string | null;
@@ -111,6 +114,7 @@ export type MenuItem = {
   video_url?: string | null;
   station?: "kitchen" | "bar";
   featured?: boolean; // platillo del día / destacado
+  is_alcohol?: boolean; // exige verificación 18+/sobriedad al servir (RACJ)
 };
 
 export type OrderItem = {

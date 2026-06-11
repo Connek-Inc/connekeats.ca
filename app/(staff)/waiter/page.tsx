@@ -26,6 +26,7 @@ import { ensureNotifyPermission, useNotifier } from "@/lib/notify";
 import {
   useAckRequest,
   useBills,
+  useBusinesses,
   useCreateStaffOrder,
   useDeleteOrderItem,
   useMarkBillPaid,
@@ -110,6 +111,8 @@ export default function WaiterPage() {
   const tables = useTables(businessId);
   const bills = useBills(businessId);
   const orders = useOrders(businessId);
+  const businesses = useBusinesses();
+  const sellsAlcohol = !!businesses.data?.find((b) => b.id === businessId)?.liquor_category;
   const ack = useAckRequest(businessId!);
   const markPaid = useMarkBillPaid(businessId!);
   const setOrderStatus = useSetOrderStatus(businessId!);
@@ -280,15 +283,22 @@ export default function WaiterPage() {
                     variant="primary"
                     size="sm"
                     isDisabled={setOrderStatus.isPending}
-                    onPress={() =>
+                    onPress={() => {
+                      if (
+                        sellsAlcohol &&
+                        !window.confirm(
+                          "Si esta mesa pidió alcohol, ¿verificaste que sea 18+ y que no esté en estado de ebriedad? (responsabilidad RACJ)",
+                        )
+                      )
+                        return;
                       setOrderStatus.mutate(
                         { orderId: o.id, status: "served" },
                         {
                           onError: () => show("No se pudo marcar servido", "error"),
                           onSuccess: () => show(`${tableLabel(o.table_id)} servida`, "success"),
                         },
-                      )
-                    }
+                      );
+                    }}
                   >
                     Servir
                   </Button>

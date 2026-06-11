@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useLocale } from "@/lib/i18n";
 import { PRIVACY } from "@/lib/privacyPolicy";
+import { TERMS } from "@/lib/termsOfService";
 
 const FEATURES = [
   { icon: QrCode, title: "Pedidos por QR", desc: "Cada mesa con su código: el comensal ve el menú con fotos y video, y pide desde su teléfono." },
@@ -133,9 +134,14 @@ export default function Landing() {
         <span className="flex items-center justify-center gap-1.5">
           <UtensilsCrossed className="size-4" /> Connek Food · connekeats.ca
         </span>
-        <Link href="/privacy" className="text-xs text-foreground/40 underline transition hover:text-foreground/70">
-          {PRIVACY.link[locale]}
-        </Link>
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs">
+          <Link href="/privacy" className="text-foreground/40 underline transition hover:text-foreground/70">
+            {PRIVACY.link[locale]}
+          </Link>
+          <Link href="/terms" className="text-foreground/40 underline transition hover:text-foreground/70">
+            {TERMS.link[locale]}
+          </Link>
+        </div>
       </footer>
     </main>
   );

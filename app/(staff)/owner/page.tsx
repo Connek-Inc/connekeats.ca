@@ -25,6 +25,7 @@ import {
   Type,
   Users,
   Video,
+  Wine,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -567,6 +568,15 @@ function MenuItemRow({ businessId, item, categories }: { businessId: number; ite
           />
           <button
             type="button"
+            className={`shrink-0 transition ${item.is_alcohol ? "text-fuchsia-400" : "text-foreground/30 hover:text-foreground/60"}`}
+            aria-label={item.is_alcohol ? `${item.name} ya no es alcohol` : `Marcar ${item.name} como alcohol (18+)`}
+            title={item.is_alcohol ? "Alcohol (18+) — clic para quitar" : "Marcar como alcohol (exige verificación 18+)"}
+            onClick={() => update.mutate({ itemId: item.id, data: { is_alcohol: !item.is_alcohol } }, onErr)}
+          >
+            <Wine className="size-4" />
+          </button>
+          <button
+            type="button"
             className={`shrink-0 transition ${item.featured ? "text-amber-400" : "text-foreground/30 hover:text-foreground/60"}`}
             aria-label={item.featured ? `Quitar ${item.name} del día` : `Marcar ${item.name} como platillo del día`}
             title={item.featured ? "Platillo del día — clic para quitar" : "Marcar como platillo del día"}
@@ -1013,6 +1023,52 @@ function TaxSettings({ business }: { business: Business }) {
   );
 }
 
+// Permiso de alcohol (Québec RACJ). El negocio lo declara; la verificación 18+ la hace el personal al servir.
+function LiquorSettings({ business }: { business: Business }) {
+  const update = useUpdateBusiness(business.id);
+  const { show } = useToast();
+  const [permit, setPermit] = useState(business.liquor_permit ?? "");
+  const [category, setCategory] = useState<string>(business.liquor_category ?? "");
+  useEffect(() => {
+    setPermit(business.liquor_permit ?? "");
+    setCategory(business.liquor_category ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business.id]);
+  const save = () =>
+    update.mutate(
+      { liquor_permit: permit.trim(), liquor_category: category || undefined },
+      { onSuccess: () => show("Permiso de alcohol guardado", "success"), onError: () => show("No se pudo guardar", "error") },
+    );
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/70">
+        <Wine className="size-4" /> Alcohol (permiso RACJ)
+      </label>
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        className="w-full rounded-lg border border-foreground/15 bg-foreground/5 px-3 py-2 text-sm text-foreground outline-none"
+        aria-label="Categoría de permiso de alcohol"
+      >
+        <option value="">— Este negocio NO vende alcohol —</option>
+        <option value="bar">Permiso de bar</option>
+        <option value="restaurant">Permiso de restaurante</option>
+      </select>
+      {category && (
+        <>
+          <Input fullWidth value={permit} onChange={(e) => setPermit(e.target.value)} placeholder="N° de permis RACJ" />
+          <p className="text-[11px] text-foreground/40">
+            El permiso es del establecimiento. Marca tus bebidas como alcohol en el menú; verificar 18+ y sobriedad es responsabilidad del personal al servir.
+          </p>
+        </>
+      )}
+      <Button variant="secondary" isDisabled={update.isPending} onPress={save}>
+        Guardar
+      </Button>
+    </div>
+  );
+}
+
 // Configuración del negocio: nombre, tipo (bar/restaurante), moneda y módulos.
 // Cada cambio se guarda al instante (PATCH); el nombre tiene botón Guardar.
 function Settings({ business }: { business: Business }) {
@@ -1103,6 +1159,9 @@ function Settings({ business }: { business: Business }) {
 
       {/* Impuestos (Canadá): GST/HST/QST/PST por componentes */}
       <TaxSettings business={business} />
+
+      {/* Alcohol (Québec RACJ): permiso del negocio */}
+      <LiquorSettings business={business} />
 
       {/* Tipo de negocio */}
       <div className="flex flex-col gap-1.5">
