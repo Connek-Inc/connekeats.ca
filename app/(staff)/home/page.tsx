@@ -5,6 +5,8 @@ import { Armchair, ChefHat, ConciergeBell, Hand, LayoutGrid, QrCode, Receipt, Se
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { LangSwitcher } from "@/components/LangSwitcher";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/lib/auth";
 import { useBusiness } from "@/lib/business";
 import { useBills, useBusinesses, useOrders, useSalesSummary, useTables } from "@/lib/hooks";
@@ -55,11 +57,17 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-8">
-      <header className="mb-6">
-        <p className="flex items-center gap-1.5 text-sm text-foreground/55">
-          Hola <Hand className="size-4" />
-        </p>
-        <h1 className="text-2xl font-bold text-foreground">{user?.email?.split("@")[0] ?? "Staff"}</h1>
+      <header className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-1.5 text-sm text-foreground/55">
+            Hola <Hand className="size-4" />
+          </p>
+          <h1 className="text-2xl font-bold text-foreground">{user?.email?.split("@")[0] ?? "Staff"}</h1>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <LangSwitcher />
+          <ThemeToggle />
+        </div>
       </header>
 
       {businesses.isLoading ? (

@@ -18,6 +18,7 @@ import type {
   Employee,
   Floor,
   Invoice,
+  LedgerEntry,
   MenuCategory,
   MenuItem,
   OcrResult,
@@ -31,7 +32,9 @@ import type {
   ServiceRequest,
   StaffInvite,
   StaffRoleRow,
+  StockItem,
   Table,
+  TimeseriesReport,
 } from "./types";
 
 type StaffRoleKind = "manager" | "waiter" | "kitchen";
@@ -760,6 +763,96 @@ export function useCloseCash(businessId: number) {
       qc.invalidateQueries({ queryKey: ["cash-current", businessId] });
       qc.invalidateQueries({ queryKey: ["cash-sessions", businessId] });
     },
+  });
+}
+
+// ── Contabilidad: libro (ingresos/egresos manuales) + reporte por periodo ──
+export function useLedger(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["ledger", businessId],
+    queryFn: () => api.get<{ entries: LedgerEntry[] }>(`/businesses/${businessId}/ledger`).then((r) => r.entries),
+  });
+}
+
+export function useCreateLedger(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      kind: "income" | "expense";
+      amount: number;
+      category?: string;
+      note?: string;
+      method?: string;
+      occurred_at?: string;
+    }) => api.post<LedgerEntry>(`/businesses/${businessId}/ledger`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ledger", businessId] });
+      qc.invalidateQueries({ queryKey: ["timeseries", businessId] });
+    },
+  });
+}
+
+export function useDeleteLedger(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/businesses/${businessId}/ledger/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ledger", businessId] });
+      qc.invalidateQueries({ queryKey: ["timeseries", businessId] });
+    },
+  });
+}
+
+export function useTimeseries(businessId: number | null, granularity: string) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["timeseries", businessId, granularity],
+    queryFn: () => api.get<TimeseriesReport>(`/businesses/${businessId}/reports/timeseries?granularity=${granularity}`),
+  });
+}
+
+// ── Stock / inventario de cocina ──
+export function useStock(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["stock", businessId],
+    queryFn: () => api.get<{ items: StockItem[] }>(`/businesses/${businessId}/stock`).then((r) => r.items),
+  });
+}
+
+export function useCreateStock(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; qty?: number; unit?: string; low_threshold?: number; note?: string }) =>
+      api.post<StockItem>(`/businesses/${businessId}/stock`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["stock", businessId] }),
+  });
+}
+
+export function usePatchStock(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Pick<StockItem, "name" | "qty" | "unit" | "low_threshold" | "note">> }) =>
+      api.patch(`/businesses/${businessId}/stock/${id}`, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["stock", businessId] }),
+  });
+}
+
+export function useAdjustStock(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, delta }: { id: number; delta: number }) =>
+      api.post(`/businesses/${businessId}/stock/${id}/adjust`, { delta }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["stock", businessId] }),
+  });
+}
+
+export function useDeleteStock(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/businesses/${businessId}/stock/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["stock", businessId] }),
   });
 }
 

@@ -313,6 +313,44 @@ export type DinerSession = {
   alcohol_end?: string | null;
 };
 
+// ── Contabilidad: libro (ingresos/egresos manuales) + reporte por periodo ──
+export type LedgerEntry = {
+  id: number;
+  business_id: number;
+  created_at: string;
+  occurred_at: string;
+  kind: "income" | "expense";
+  amount: number;
+  category: string | null;
+  note: string | null;
+  method: string | null;
+};
+export type TimeseriesBucket = {
+  key: string;
+  sales: number;
+  income: number;
+  expense: number;
+  net: number;
+  count: number;
+};
+export type TimeseriesReport = {
+  granularity: string;
+  since: string;
+  buckets: TimeseriesBucket[];
+  totals: { sales: number; income: number; expense: number; net: number; count: number };
+};
+
+// ── Stock / inventario de cocina ──
+export type StockItem = {
+  id: number;
+  business_id: number;
+  name: string;
+  qty: number;
+  unit: string | null;
+  low_threshold: number;
+  note: string | null;
+};
+
 // ── Seed / onboarding (espejo de database/models.py SeedRequest) ──
 export type SeedItemInput = {
   name: string;

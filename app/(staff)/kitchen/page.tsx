@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 import { KdsItems } from "@/components/KdsItems";
+import { StockPanel } from "@/components/StockPanel";
 import { useBusiness } from "@/lib/business";
 import { useMenu, useOrderWithItems, useOrders, useSetItemStatus, useSetOrderStatus } from "@/lib/hooks";
 import { useRealtime } from "@/lib/realtime";
@@ -50,6 +51,8 @@ export default function KitchenPage() {
       ) : (
         <p className="text-foreground/40">Sin pedidos activos.</p>
       )}
+
+      {businessId && <StockPanel businessId={businessId} />}
     </main>
   );
 }
