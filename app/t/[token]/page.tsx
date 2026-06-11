@@ -4,13 +4,14 @@
 import { Button, Card, Spinner } from "@heroui/react";
 import { ArrowLeft, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minus, Play, Plus, Star, Unplug, UtensilsCrossed } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LangSwitcher } from "@/components/LangSwitcher";
 import { api } from "@/lib/api";
 import { BrandStyle } from "@/lib/brand";
 import { useT } from "@/lib/i18n";
 import { presetFor } from "@/lib/modePresets";
+import { ensureNotifyPermission, useNotifier } from "@/lib/notify";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
 import type { DinerSession, MenuCategory, MenuItem, Order } from "@/lib/types";
@@ -35,6 +36,9 @@ export default function DinerTablePage() {
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSent, setReviewSent] = useState(false);
   const [billRequested, setBillRequested] = useState(false);
+  const [orderReady, setOrderReady] = useState(false);
+  const notifier = useNotifier();
+  const readyNotified = useRef(false);
 
   const dt = session?.token ?? null;
   const color = tableColor(session?.table_id);
@@ -63,6 +67,30 @@ export default function DinerTablePage() {
     const cur = await api.get<{ order: Order | null }>("/diner/order", dt);
     setOrder(cur.order);
   }, [dt]);
+
+  // Pide permiso de notificaciones + sondea el pedido cada 12s (por si no hay realtime).
+  useEffect(() => {
+    ensureNotifyPermission();
+  }, []);
+  useEffect(() => {
+    if (!dt) return;
+    const id = setInterval(() => void refreshOrder(), 12000);
+    return () => clearInterval(id);
+  }, [dt, refreshOrder]);
+  // Cuando la cocina marca el pedido LISTO → banner + notificación (una sola vez).
+  useEffect(() => {
+    const s = order?.status;
+    if (s === "ready") {
+      setOrderReady(true);
+      if (!readyNotified.current) {
+        readyNotified.current = true;
+        notifier(t("diner.orderReady"));
+      }
+    } else if (s === "served" || s === "paid") {
+      setOrderReady(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.status]);
 
   const add = (id: number) => setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }));
   const addQty = (id: number, n: number) => setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + n }));
@@ -209,6 +237,14 @@ export default function DinerTablePage() {
           />
         ))}
       </div>
+
+      {/* Pedido listo (la cocina avisó al mesero y a ti) */}
+      {orderReady && (
+        <Card className="beacon-pulse mb-5 flex items-center gap-3 rounded-3xl border border-foreground/30 bg-foreground/10 p-4 text-foreground">
+          <CheckCircle2 className="size-7 shrink-0" />
+          <span className="text-lg font-bold">{t("diner.orderReady")}</span>
+        </Card>
+      )}
 
       {/* Cuenta actual */}
       {order && order.items?.length ? (

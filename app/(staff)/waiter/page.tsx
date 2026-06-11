@@ -16,12 +16,13 @@ import {
   Utensils,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CobroPanel } from "@/components/CobroPanel";
 import { FloorMap } from "@/components/FloorMap";
 import { useAuth } from "@/lib/auth";
 import { useBusiness } from "@/lib/business";
+import { ensureNotifyPermission, useNotifier } from "@/lib/notify";
 import {
   useAckRequest,
   useBills,
@@ -151,6 +152,46 @@ export default function WaiterPage() {
   // Pedidos LISTOS para servir (la cocina los marcó 'ready'), de las mesas visibles.
   const visibleIds = new Set(visibleTables.map((t) => t.id));
   const readyOrders = (orders.data ?? []).filter((o) => o.status === "ready" && visibleIds.has(o.table_id));
+
+  // ── Notificaciones efectivas (toast + sonido + notificación del SO en 2º plano) ──
+  const notifier = useNotifier();
+  const knownReady = useRef<Set<number> | null>(null);
+  const knownReqs = useRef<Set<number> | null>(null);
+  useEffect(() => {
+    ensureNotifyPermission();
+  }, []);
+
+  const readyKey = readyOrders.map((o) => o.id).join(",");
+  useEffect(() => {
+    const cur = new Set(readyOrders.map((o) => o.id));
+    if (knownReady.current === null) {
+      knownReady.current = cur; // no avisar en la carga inicial
+      return;
+    }
+    for (const o of readyOrders) {
+      if (!knownReady.current.has(o.id)) {
+        notifier(`🔔 ${tableLabel(o.table_id)}: pedido listo para servir`, { body: `Pedido #${o.id} listo en cocina` });
+      }
+    }
+    knownReady.current = cur;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyKey]);
+
+  const reqKey = openRequests.map((r) => r.id).join(",");
+  useEffect(() => {
+    const cur = new Set(openRequests.map((r) => r.id));
+    if (knownReqs.current === null) {
+      knownReqs.current = cur;
+      return;
+    }
+    for (const r of openRequests) {
+      if (!knownReqs.current.has(r.id)) {
+        notifier(`🛎️ ${tableLabel(r.table_id)}: ${SR_LABEL[r.type]}`, { body: reqText(r) });
+      }
+    }
+    knownReqs.current = cur;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reqKey]);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-8">

@@ -487,6 +487,9 @@ export function useOrders(businessId: number | null) {
     enabled: !!businessId,
     queryKey: ["orders", businessId],
     queryFn: () => api.get<{ orders: Order[] }>(`/businesses/${businessId}/orders`).then((r) => r.orders),
+    // Fallback de tiempo real: refresca cada 12s aunque el realtime (websockets)
+    // no esté configurado, para que las notificaciones cocina→mesero funcionen.
+    refetchInterval: 12000,
   });
 }
 
