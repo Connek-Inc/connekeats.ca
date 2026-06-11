@@ -169,7 +169,7 @@ export default function DinerTablePage() {
         )}
         <div className="flex items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 text-foreground/60">
-            <mp.Icon className="size-4" /> {mp.label}
+            <mp.Icon className="size-4" /> {t(`preset.${session.mode}.label`)}
           </p>
           <LangSwitcher />
         </div>
@@ -200,7 +200,7 @@ export default function DinerTablePage() {
           <QuickAction
             key={qa.id}
             icon={qa.icon}
-            label={qa.label}
+            label={t(`qa.${qa.id}`)}
             onPress={() => {
               if (qa.kind === "call_waiter") serviceRequest("call_waiter");
               else if (qa.kind === "request_item") serviceRequest("request_item", qa.text);
@@ -266,7 +266,7 @@ export default function DinerTablePage() {
       )}
 
       {/* Menú */}
-      <p className="mb-2 text-xs uppercase tracking-wide text-foreground/50">{mp.terms.menu}</p>
+      <p className="mb-2 text-xs uppercase tracking-wide text-foreground/50">{t(`preset.${session.mode}.menu`)}</p>
 
       {/* Chips de categoría (si el dueño definió categorías) */}
       {chipCats.length > 0 && (
