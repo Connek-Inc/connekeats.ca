@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Martini } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
+import { KdsItems } from "@/components/KdsItems";
 import { useMenu, useOrderWithItems, useOrders, useSetItemStatus } from "@/lib/hooks";
 import { useRealtime } from "@/lib/realtime";
 import { tableColor } from "@/lib/tableColor";
@@ -58,14 +59,6 @@ function BarCard({ businessId, order, barIds }: { businessId: number; order: Ord
   const detail = useOrderWithItems(businessId, order.id);
   const setItem = useSetItemStatus(businessId);
 
-  const nextItem: Record<string, string> = { queued: "preparing", preparing: "ready", ready: "served" };
-  const itemTone: Record<string, string> = {
-    queued: "bg-foreground/[0.04] border-foreground/10",
-    preparing: "bg-foreground/10 border-foreground/25",
-    ready: "bg-foreground/20 border-foreground/50",
-    served: "bg-foreground/[0.02] border-foreground/5 text-foreground/40",
-  };
-
   const items = (detail.data?.items ?? []).filter((it) => it.menu_item_id != null && barIds.has(it.menu_item_id));
   if (detail.isSuccess && items.length === 0) return null;
 
@@ -76,24 +69,7 @@ function BarCard({ businessId, order, barIds }: { businessId: number; order: Ord
         <span className="h-3 w-3 rounded-full" style={{ backgroundColor: c.hex }} />
         Pedido #{order.id} · Mesa {order.table_id}
       </p>
-      <div className="flex flex-col gap-1.5">
-        {items.map((it) => (
-          <button
-            key={it.id}
-            disabled={it.status === "served"}
-            onClick={() =>
-              nextItem[it.status] && setItem.mutate({ orderId: order.id, itemId: it.id, status: nextItem[it.status] })
-            }
-            className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 text-left ${itemTone[it.status]}`}
-          >
-            <span className="text-foreground">
-              {it.qty}× {it.name_snapshot}
-              {it.notes ? `  · ${it.notes}` : ""}
-            </span>
-            <span className="text-xs text-foreground/50">{it.status}</span>
-          </button>
-        ))}
-      </div>
+      <KdsItems items={items} onAdvance={(it, next) => setItem.mutate({ orderId: order.id, itemId: it.id, status: next })} />
     </Card>
   );
 }

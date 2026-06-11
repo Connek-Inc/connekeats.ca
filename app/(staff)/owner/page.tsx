@@ -651,7 +651,11 @@ function roleLabel(r: string) {
   return r === "owner" ? "Dueño" : r === "manager" ? "Gerente" : r === "waiter" ? "Mesero" : "Cocina";
 }
 
-type EmpPatch = Partial<Pick<Employee, "name" | "phone" | "position" | "hire_date" | "wage" | "status" | "notes">>;
+type EmpPatch = Partial<Pick<Employee, "name" | "phone" | "position" | "hire_date" | "wage" | "status" | "notes" | "is_tipped">>;
+
+// Salario mínimo de Québec (1-may-2026): general vs con propina (à pourboire).
+const QC_MIN_WAGE = 16.6;
+const QC_MIN_WAGE_TIPPED = 13.3;
 
 function ProfileField({
   label,
@@ -693,6 +697,9 @@ function MemberProfile({
   onSave: (patch: EmpPatch) => void;
 }) {
   const isActive = (emp?.status ?? "active") === "active";
+  const isTipped = !!emp?.is_tipped;
+  const floor = isTipped ? QC_MIN_WAGE_TIPPED : QC_MIN_WAGE;
+  const belowFloor = emp?.wage != null && emp.wage > 0 && emp.wage < floor;
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-foreground/10 bg-foreground/[0.02] p-3">
       <div className="flex items-center justify-between">
@@ -710,6 +717,14 @@ function MemberProfile({
         <Toggle on={isActive} onToggle={() => onSave({ status: isActive ? "inactive" : "active" })} label="Estado del empleado" />
         <span className="text-sm text-foreground/70">{isActive ? "Activo" : "Inactivo"}</span>
       </div>
+      <div className="flex items-center gap-2">
+        <Toggle on={isTipped} onToggle={() => onSave({ is_tipped: !isTipped })} label="Empleado con propina" />
+        <span className="text-sm text-foreground/70">Con propina (à pourboire)</span>
+      </div>
+      <p className="text-[11px] text-foreground/40">
+        Mínimo legal QC: <span className="font-semibold text-foreground/60">${floor.toFixed(2)}/h</span> {isTipped ? "(con propina)" : "(general)"}.
+        {belowFloor && <span className="font-semibold text-amber-500"> ⚠ El pago está por debajo del mínimo.</span>}
+      </p>
     </div>
   );
 }
@@ -1029,14 +1044,18 @@ function LiquorSettings({ business }: { business: Business }) {
   const { show } = useToast();
   const [permit, setPermit] = useState(business.liquor_permit ?? "");
   const [category, setCategory] = useState<string>(business.liquor_category ?? "");
+  const [aStart, setAStart] = useState(business.alcohol_start ?? "08:00");
+  const [aEnd, setAEnd] = useState(business.alcohol_end ?? "03:00");
   useEffect(() => {
     setPermit(business.liquor_permit ?? "");
     setCategory(business.liquor_category ?? "");
+    setAStart(business.alcohol_start ?? "08:00");
+    setAEnd(business.alcohol_end ?? "03:00");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [business.id]);
   const save = () =>
     update.mutate(
-      { liquor_permit: permit.trim(), liquor_category: category || undefined },
+      { liquor_permit: permit.trim(), liquor_category: category || undefined, alcohol_start: aStart, alcohol_end: aEnd },
       { onSuccess: () => show("Permiso de alcohol guardado", "success"), onError: () => show("No se pudo guardar", "error") },
     );
   return (
@@ -1057,8 +1076,28 @@ function LiquorSettings({ business }: { business: Business }) {
       {category && (
         <>
           <Input fullWidth value={permit} onChange={(e) => setPermit(e.target.value)} placeholder="N° de permis RACJ" />
+          <div className="flex items-center gap-2">
+            <label className="flex flex-1 flex-col gap-1 text-[11px] text-foreground/50">
+              Venta de alcohol desde
+              <input
+                type="time"
+                value={aStart}
+                onChange={(e) => setAStart(e.target.value)}
+                className="rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1.5 text-sm text-foreground outline-none"
+              />
+            </label>
+            <label className="flex flex-1 flex-col gap-1 text-[11px] text-foreground/50">
+              hasta
+              <input
+                type="time"
+                value={aEnd}
+                onChange={(e) => setAEnd(e.target.value)}
+                className="rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1.5 text-sm text-foreground outline-none"
+              />
+            </label>
+          </div>
           <p className="text-[11px] text-foreground/40">
-            El permiso es del establecimiento. Marca tus bebidas como alcohol en el menú; verificar 18+ y sobriedad es responsabilidad del personal al servir.
+            Fuera de ese horario, el comensal no puede pedir alcohol (QC: sur place 8h–3h). El permiso es del establecimiento; verificar 18+ y sobriedad es responsabilidad del personal al servir.
           </p>
         </>
       )}

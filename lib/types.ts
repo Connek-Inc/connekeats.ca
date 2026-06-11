@@ -30,6 +30,7 @@ export type Employee = {
   wage: number | null;
   status: "active" | "inactive";
   notes: string | null;
+  is_tipped?: boolean; // empleado à pourboire (QC) → salario mínimo con propina
 };
 
 export type TaxComponent = { name: string; rate: number; number?: string | null };
@@ -51,6 +52,8 @@ export type Business = {
   // Alcohol (Québec RACJ)
   liquor_permit?: string | null;
   liquor_category?: "bar" | "restaurant" | null;
+  alcohol_start?: string | null; // 'HH:MM'
+  alcohol_end?: string | null; // 'HH:MM' (puede cruzar medianoche)
   // Marca / white-label
   logo_url?: string | null;
   brand_primary?: string | null;
@@ -126,6 +129,7 @@ export type OrderItem = {
   qty: number;
   notes: string | null;
   status: OrderItemStatus;
+  round?: number; // tanda: 1 = primer pedido, 2 = segunda tanda, etc.
 };
 
 export type Order = {
@@ -303,6 +307,10 @@ export type DinerSession = {
   brand_fg?: string | null;
   brand_base?: "light" | "dark" | null;
   brand_font?: string | null;
+  // Alcohol: si el negocio vende + ventana horaria de venta
+  sells_alcohol?: boolean;
+  alcohol_start?: string | null;
+  alcohol_end?: string | null;
 };
 
 // ── Seed / onboarding (espejo de database/models.py SeedRequest) ──

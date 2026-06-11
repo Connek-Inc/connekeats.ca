@@ -72,6 +72,8 @@ export function useUpdateBusiness(businessId: number) {
       // Alcohol (RACJ)
       liquor_permit?: string;
       liquor_category?: string;
+      alcohol_start?: string;
+      alcohol_end?: string;
       // Marca / white-label ("" = restablecer)
       logo_url?: string;
       brand_primary?: string;
@@ -794,6 +796,7 @@ export function useUpsertEmployee(businessId: number) {
       wage?: number | null;
       status?: "active" | "inactive";
       notes?: string | null;
+      is_tipped?: boolean;
     }) => api.post<Employee>(`/businesses/${businessId}/employees`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["employees", businessId] }),
   });

@@ -4,6 +4,7 @@ import { Button, Card, Chip } from "@heroui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
+import { KdsItems } from "@/components/KdsItems";
 import { useBusiness } from "@/lib/business";
 import { useMenu, useOrderWithItems, useOrders, useSetItemStatus, useSetOrderStatus } from "@/lib/hooks";
 import { useRealtime } from "@/lib/realtime";
@@ -58,14 +59,6 @@ function KitchenCard({ businessId, order, barIds }: { businessId: number; order:
   const setItem = useSetItemStatus(businessId);
   const setOrder = useSetOrderStatus(businessId);
 
-  const nextItem: Record<string, string> = { queued: "preparing", preparing: "ready", ready: "served" };
-  const itemTone: Record<string, string> = {
-    queued: "bg-foreground/[0.04] border-foreground/10",
-    preparing: "bg-foreground/10 border-foreground/25",
-    ready: "bg-foreground/20 border-foreground/50",
-    served: "bg-foreground/[0.02] border-foreground/5 text-foreground/40",
-  };
-
   // Solo ítems de COCINA (los de barra van al tablero de la barra).
   const items = (detail.data?.items ?? []).filter(
     (it) => !(it.menu_item_id != null && barIds.has(it.menu_item_id)),
@@ -84,22 +77,7 @@ function KitchenCard({ businessId, order, barIds }: { businessId: number; order:
         </Chip>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        {items.map((it) => (
-          <button
-            key={it.id}
-            disabled={it.status === "served"}
-            onClick={() => nextItem[it.status] && setItem.mutate({ orderId: order.id, itemId: it.id, status: nextItem[it.status] })}
-            className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 text-left ${itemTone[it.status]}`}
-          >
-            <span className="text-foreground">
-              {it.qty}× {it.name_snapshot}
-              {it.notes ? `  · ${it.notes}` : ""}
-            </span>
-            <span className="text-xs text-foreground/50">{it.status}</span>
-          </button>
-        ))}
-      </div>
+      <KdsItems items={items} onAdvance={(it, next) => setItem.mutate({ orderId: order.id, itemId: it.id, status: next })} />
 
       <div className="flex gap-2">
         {order.status !== "preparing" && (

@@ -2,7 +2,7 @@
 // Experiencia del comensal por QR (web pública, sin login). Opera con el token
 // efímero de mesa contra /diner/*. Construida con HeroUI v3 (dark/glass).
 import { Button, Card, Spinner } from "@heroui/react";
-import { ArrowLeft, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minus, Play, Plus, Star, Unplug, UtensilsCrossed, Wine } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minus, Play, Plus, Printer, Star, Unplug, UtensilsCrossed, Wine } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -16,6 +16,20 @@ import { TERMS } from "@/lib/termsOfService";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
 import type { DinerSession, MenuCategory, MenuItem, Order } from "@/lib/types";
+
+// ¿La hora local actual está dentro de la ventana [start, end]? end < start
+// significa que cruza la medianoche (p.ej. 08:00→03:00). Sin ventana → true.
+function withinWindow(start?: string | null, end?: string | null): boolean {
+  if (!start || !end) return true;
+  const now = new Date();
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const s = sh * 60 + sm;
+  const e = eh * 60 + em;
+  if (Number.isNaN(s) || Number.isNaN(e) || s === e) return true;
+  return s < e ? cur >= s && cur < e : cur >= s || cur < e;
+}
 
 export default function DinerTablePage() {
   const { token: qrToken } = useParams<{ token: string }>();
@@ -94,8 +108,19 @@ export default function DinerTablePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.status]);
 
-  const add = (id: number) => setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }));
-  const addQty = (id: number, n: number) => setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + n }));
+  // Alcohol sólo dentro del horario de venta del negocio (RACJ). Si no hay
+  // ventana configurada, se permite (no rompe negocios sin alcohol).
+  const alcoholOk = withinWindow(session?.alcohol_start, session?.alcohol_end);
+  const tryAdd = (id: number, n: number) => {
+    const it = items.find((i) => i.id === id);
+    if (it?.is_alcohol && !alcoholOk) {
+      show(t("diner.alcoholClosed"), "error");
+      return;
+    }
+    setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + n }));
+  };
+  const add = (id: number) => tryAdd(id, 1);
+  const addQty = (id: number, n: number) => tryAdd(id, n);
 
   const cartLines = useMemo(
     () => Object.entries(cart).map(([id, qty]) => ({ item: items.find((i) => i.id === Number(id))!, qty })),
@@ -201,7 +226,15 @@ export default function DinerTablePage() {
           <p className="flex items-center gap-1.5 text-foreground/60">
             <mp.Icon className="size-4" /> {t(`preset.${session.mode}.label`)}
           </p>
-          <LangSwitcher />
+          <div className="flex items-center gap-2">
+            <a
+              href={`/t/${qrToken}/carta`}
+              className="flex items-center gap-1 rounded-full border border-foreground/15 px-2.5 py-1 text-xs text-foreground/60 transition hover:text-foreground"
+            >
+              <Printer className="size-3.5" aria-hidden /> {t("diner.printMenu")}
+            </a>
+            <LangSwitcher />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-4xl font-bold tracking-tight text-foreground">{session.table_label}</h1>
