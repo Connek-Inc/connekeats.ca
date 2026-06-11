@@ -22,6 +22,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { Logo } from "@/components/Logo";
 import { useAuth } from "@/lib/auth";
 import { useLocale } from "@/lib/i18n";
 import { PRIVACY } from "@/lib/privacyPolicy";
@@ -55,9 +56,7 @@ export default function Landing() {
     <main className="min-h-dvh bg-background text-foreground">
       {/* Top bar */}
       <header className="safe-pt sticky top-0 z-20 flex items-center justify-between px-5 py-4 backdrop-blur">
-        <span className="flex items-center gap-2 font-bold">
-          <UtensilsCrossed className="size-5" /> Connek Food
-        </span>
+        <Logo className="h-6" />
         <Button size="sm" variant="primary" className="rounded-full" onPress={enter}>
           {session ? "Ir al panel" : "Entrar"}
         </Button>
@@ -131,8 +130,8 @@ export default function Landing() {
       </section>
 
       <footer className="safe-pb flex flex-col items-center gap-2 border-t border-foreground/10 px-5 py-8 text-center text-sm text-foreground/40">
-        <span className="flex items-center justify-center gap-1.5">
-          <UtensilsCrossed className="size-4" /> Connek Food · connekeats.ca
+        <span className="flex items-center justify-center gap-2">
+          <Logo className="h-5 opacity-70" /> <span>· connekeats.ca</span>
         </span>
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs">
           <Link href="/privacy" className="text-foreground/40 underline transition hover:text-foreground/70">

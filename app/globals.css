@@ -43,6 +43,13 @@
   --warning-foreground: oklch(0 0 0);
 }
 
+/* ── Logo de Connek por tema (swap sin JS; sigue las clases .light/.dark del
+   <html> que pone next-themes → sin parpadeo en SSR). ── */
+.brand-logo--light { display: block; }
+.brand-logo--dark { display: none; }
+.dark .brand-logo--light { display: none; }
+.dark .brand-logo--dark { display: block; }
+
 html {
   min-height: 100dvh;
   -webkit-text-size-adjust: 100%;

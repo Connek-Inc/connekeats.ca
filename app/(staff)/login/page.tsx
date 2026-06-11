@@ -1,9 +1,9 @@
 "use client";
 
-import { UtensilsCrossed } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GitHubIcon, MailIcon } from "@/components/icons";
 import { useAuth } from "@/lib/auth";
@@ -90,12 +90,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-[28px] border border-foreground/10 bg-surface p-7 sm:p-8 shadow-2xl">
         {/* Marca arriba + cambio de tema */}
         <div className="mb-7 flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground text-background">
-              <UtensilsCrossed className="size-5" />
-            </div>
-            <span className="text-[15px] font-semibold tracking-tight text-foreground">Connek Restaurant</span>
-          </div>
+          <Logo className="h-8" />
           <ThemeToggle />
         </div>
 
