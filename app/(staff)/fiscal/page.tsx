@@ -24,8 +24,8 @@ import {
 } from "@/lib/hooks";
 import { useToast } from "@/lib/toast";
 import type { FiscalTransaction } from "@/lib/types";
-
-const money = (n: number | null | undefined) => `$${(Number(n) || 0).toFixed(2)}`;
+import { InfoBanner } from "@/components/ui";
+import { money } from "@/lib/format";
 
 const STATUS: Record<string, { label: string; tone: string }> = {
   draft: { label: "Borrador", tone: "text-foreground/50" },
@@ -74,14 +74,11 @@ export default function FiscalPage() {
         <h1 className="text-2xl font-bold text-foreground">Facturación fiscal · SEV</h1>
       </header>
 
-      <Card className="mb-6 flex items-start gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-foreground/70">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
-        <span>
-          La <b>transmisión al MEV-WEB</b> está pendiente de la certificación con Revenu Québec (code d&apos;autorisation
-          + certificat + guías SW-73). Hasta entonces, &ldquo;Transmitir&rdquo; deja la transacción en cola. El resto del
-          motor (factura, impuestos, estados, auditoría) ya funciona. Ver <b>FISCAL_ENGINE.md</b>.
-        </span>
-      </Card>
+      <InfoBanner className="mb-6" icon={<AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />}>
+        La <b>transmisión al MEV-WEB</b> está pendiente de la certificación con Revenu Québec (code d&apos;autorisation +
+        certificat + guías SW-73). Hasta entonces, &ldquo;Transmitir&rdquo; deja la transacción en cola. El resto del motor
+        (factura, impuestos, estados, auditoría) ya funciona. Ver <b>FISCAL_ENGINE.md</b>.
+      </InfoBanner>
 
       {/* Generar factura fiscal desde una cuenta pagada */}
       <section className="mb-6">

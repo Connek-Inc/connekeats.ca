@@ -11,8 +11,9 @@ import { API_URL } from "@/lib/config";
 import { useCashCurrent, useCloseCash, useCreateLedger, useDeleteLedger, useLedger, useOpenCash, useSalesSummary, useTimeseries } from "@/lib/hooks";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/lib/toast";
+import { EmptyState as Empty, ListRow as Row, Section, Stat } from "@/components/ui";
+import { money } from "@/lib/format";
 
-const money = (n: number) => `$${(Number(n) || 0).toFixed(2)}`;
 const METHOD_META: Record<string, { icon: LucideIcon; label: string }> = {
   cash: { icon: Banknote, label: "Efectivo" },
   card: { icon: CreditCard, label: "Tarjeta" },
@@ -407,33 +408,4 @@ function CashBox({ businessId }: { businessId: number }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="glass rounded-2xl p-3 text-center">
-      <p className="text-lg font-bold text-foreground">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-foreground/45">{label}</p>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="mb-2 text-xs uppercase tracking-wide text-foreground/50">{title}</p>
-      <Card className="glass flex flex-col gap-1.5 rounded-2xl p-3">{children}</Card>
-    </div>
-  );
-}
-
-function Row({ left, right }: { left: React.ReactNode; right: string }) {
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <span className="text-foreground/75">{left}</span>
-      <span className="font-medium text-foreground">{right}</span>
-    </div>
-  );
-}
-
-function Empty() {
-  return <p className="text-sm text-foreground/40">Sin datos en este rango.</p>;
-}
+// Stat / Section / Row / Empty se reutilizan desde @/components/ui
