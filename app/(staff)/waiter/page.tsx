@@ -35,6 +35,7 @@ import {
   useBusinesses,
   useCreateStaffOrder,
   useDeleteOrderItem,
+  useKds,
   useMarkBillPaid,
   useMenu,
   useOrderWithItems,
@@ -125,6 +126,7 @@ export default function WaiterPage() {
   const tables = useTables(businessId);
   const bills = useBills(businessId);
   const orders = useOrders(businessId);
+  const kds = useKds(businessId);
   const businesses = useBusinesses();
   const sellsAlcohol = !!businesses.data?.find((b) => b.id === businessId)?.liquor_category;
   const ack = useAckRequest(businessId!);
@@ -141,11 +143,13 @@ export default function WaiterPage() {
     qc.invalidateQueries({ queryKey: ["bills", businessId] });
     qc.invalidateQueries({ queryKey: ["tables", businessId] });
     qc.invalidateQueries({ queryKey: ["orders", businessId] });
+    qc.invalidateQueries({ queryKey: ["kds", businessId] });
   }, [qc, businessId]);
 
   useRealtime("service_request", businessId, refresh);
   useRealtime("tables", businessId, refresh);
   useRealtime("orders", businessId, refresh);
+  useRealtime("order_item", businessId, refresh);
 
   const openByTable = useMemo(() => {
     const m: Record<number, number> = {};
@@ -169,6 +173,11 @@ export default function WaiterPage() {
   // Pedidos LISTOS para servir (la cocina los marcó 'ready'), de las mesas visibles.
   const visibleIds = new Set(visibleTables.map((t) => t.id));
   const readyOrders = (orders.data ?? []).filter((o) => o.status === "ready" && visibleIds.has(o.table_id));
+  // PASE: ítems concretos listos por mesa (qué llevar), de las mesas visibles.
+  const readyTickets = (kds.data ?? [])
+    .filter((o) => visibleIds.has(o.table_id))
+    .map((o) => ({ order: o, ready: (o.items ?? []).filter((it) => it.status === "ready") }))
+    .filter((t) => t.ready.length > 0);
 
   // ── Notificaciones efectivas (toast + sonido + notificación del SO en 2º plano) ──
   const notifier = useNotifier();
@@ -273,25 +282,41 @@ export default function WaiterPage() {
         )}
       </div>
 
-      {/* ── Listos para servir (la cocina avisa al mesero) ── */}
-      {readyOrders.length > 0 && (
+      {/* ── Pase · listos para servir (qué llevar a cada mesa) ── */}
+      {readyTickets.length > 0 && (
         <>
           <p className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wide text-foreground/50">
-            <Utensils className="size-3.5" /> Listos para servir
+            <Utensils className="size-3.5" /> Pase · listos para servir
           </p>
           <div className="mb-7 flex flex-col gap-2">
-            {readyOrders.map((o) => {
+            {readyTickets.map(({ order: o, ready }) => {
               const c = tableColor(o.table_id);
               return (
                 <Card
                   key={o.id}
                   style={{ borderLeftColor: c.hex, borderLeftWidth: 5, borderLeftStyle: "solid" }}
-                  className="flex flex-row items-center justify-between rounded-3xl bg-foreground/[0.07] p-4"
+                  className="flex flex-row items-start justify-between gap-3 rounded-3xl bg-foreground/[0.07] p-4"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: c.hex }} />
-                    <p className="font-semibold text-foreground">{tableLabel(o.table_id)}</p>
-                    <span className="text-xs text-foreground/45">pedido #{o.id} listo</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: c.hex }} />
+                      <p className="font-semibold text-foreground">{tableLabel(o.table_id)}</p>
+                      <span className="text-xs text-foreground/45">#{o.id}</span>
+                    </div>
+                    <div className="mt-1 flex flex-col gap-0.5">
+                      {ready.map((it) => {
+                        const mods = modifierLabel(it.modifiers);
+                        return (
+                          <p key={it.id} className="text-sm text-foreground/80">
+                            {it.qty}× {it.name_snapshot}
+                            {it.course ? (
+                              <span className="ml-1 text-[10px] uppercase text-foreground/40">{COURSE_LABEL[it.course] ?? ""}</span>
+                            ) : null}
+                            {mods ? <span className="text-foreground/50"> · {mods}</span> : null}
+                          </p>
+                        );
+                      })}
+                    </div>
                   </div>
                   <Button
                     variant="primary"
@@ -401,6 +426,7 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
   const addItems = useAddItemsToOrder(businessId);
   const updateQty = useUpdateOrderItemQty(businessId);
   const delItem = useDeleteOrderItem(businessId);
+  const setOrderStatus = useSetOrderStatus(businessId);
   const { show } = useToast();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pickItem, setPickItem] = useState<MenuItem | null>(null);
@@ -623,6 +649,32 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
                 onDone={onClose}
               />
             </div>
+
+            {/* Cancelar el pedido completo (libera la mesa + cancela la cuenta) */}
+            {activeOrder && (
+              <Button
+                variant="secondary"
+                fullWidth
+                isDisabled={setOrderStatus.isPending}
+                onPress={() => {
+                  if (!window.confirm("¿Cancelar TODO el pedido de esta mesa? Se libera la mesa.")) return;
+                  setOrderStatus.mutate(
+                    { orderId: activeOrder.id, status: "cancelled" },
+                    {
+                      onError: (e) => show(e instanceof Error ? e.message : "No se pudo cancelar", "error"),
+                      onSuccess: () => {
+                        show("Pedido cancelado", "success");
+                        onClose();
+                      },
+                    },
+                  );
+                }}
+              >
+                <span className="flex items-center justify-center gap-2 text-red-500">
+                  <X className="size-4" /> Cancelar pedido
+                </span>
+              </Button>
+            )}
 
             {/* Liberar la mesa para el próximo cliente (el backend impide si hay cuenta pendiente) */}
             <Button variant="secondary" fullWidth isDisabled={freeTable.isPending} onPress={liberar}>

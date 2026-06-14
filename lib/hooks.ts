@@ -626,6 +626,32 @@ export function useKdsAction(businessId: number) {
   });
 }
 
+// Marca/quita 'rush' (urgente) de un ticket.
+export function useSetOrderPriority(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, priority }: { orderId: number; priority: boolean }) =>
+      api.patch(`/businesses/${businessId}/orders/${orderId}/priority`, { priority }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kds", businessId] });
+      qc.invalidateQueries({ queryKey: ["orders", businessId] });
+    },
+  });
+}
+
+// 86/agotado: la cocina oculta/reactiva un ítem del menú del comensal.
+export function useToggleItemAvailability(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, available }: { itemId: number; available: boolean }) =>
+      api.patch(`/businesses/${businessId}/menu/items/${itemId}/availability`, { available }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["menu", businessId] });
+      qc.invalidateQueries({ queryKey: ["kds", businessId] });
+    },
+  });
+}
+
 export function useSetOrderStatus(businessId: number) {
   const qc = useQueryClient();
   return useMutation({

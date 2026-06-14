@@ -180,6 +180,8 @@ export type Order = {
   channel: "qr" | "waiter";
   total: number;
   created_at?: string | null; // para el temporizador del KDS
+  waiter_id?: string | null; // mesero asignado
+  priority?: boolean; // rush / urgente
   items?: OrderItem[];
 };
 

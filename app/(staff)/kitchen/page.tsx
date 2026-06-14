@@ -33,7 +33,7 @@ export default function KitchenPage() {
         </p>
       </header>
 
-      <KdsBoard station="kitchen" orders={kds.data ?? []} barIds={barIds} />
+      <KdsBoard businessId={businessId!} station="kitchen" orders={kds.data ?? []} barIds={barIds} />
 
       {businessId && <StockPanel businessId={businessId} />}
     </main>

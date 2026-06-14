@@ -33,7 +33,7 @@ export function BarBoard({ businessId }: { businessId: number }) {
     <div className="flex flex-col gap-4">
       <p className="text-xs uppercase tracking-wide text-foreground/50">Tablero de barra · en vivo</p>
       {hasBarItems ? (
-        <KdsBoard station="bar" orders={kds.data ?? []} barIds={barIds} />
+        <KdsBoard businessId={businessId} station="bar" orders={kds.data ?? []} barIds={barIds} />
       ) : (
         <Card className="glass flex flex-col items-center gap-2 rounded-3xl p-8 text-center text-foreground/50">
           <Martini className="size-8 text-foreground/40" />
