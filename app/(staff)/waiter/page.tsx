@@ -11,6 +11,8 @@ import {
   HandCoins,
   Landmark,
   type LucideIcon,
+  Minus,
+  Plus,
   RefreshCw,
   Trash2,
   Utensils,
@@ -20,11 +22,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CobroPanel } from "@/components/CobroPanel";
 import { FloorMap } from "@/components/FloorMap";
+import { modifierLabel } from "@/components/KdsItems";
+import { ModifierPicker } from "@/components/ModifierPicker";
 import { useAuth } from "@/lib/auth";
 import { useBusiness } from "@/lib/business";
+import { type CartLine, cartKey, cartLineModLabel, hasModifiers, lineUnitPrice } from "@/lib/cart";
 import { ensureNotifyPermission, useNotifier } from "@/lib/notify";
 import {
   useAckRequest,
+  useAddItemsToOrder,
   useBills,
   useBusinesses,
   useCreateStaffOrder,
@@ -36,12 +42,20 @@ import {
   useServiceRequests,
   useSetOrderStatus,
   useTables,
+  useUpdateOrderItemQty,
   useUpdateTable,
 } from "@/lib/hooks";
 import { useRealtime } from "@/lib/realtime";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
-import type { ServiceRequest, Table } from "@/lib/types";
+import type { MenuItem, ServiceRequest, Table } from "@/lib/types";
+
+const COURSE_LABEL: Record<string, string> = {
+  starter: "Entrada",
+  main: "Plato fuerte",
+  dessert: "Postre",
+  drink: "Bebida",
+};
 
 const SR_LABEL: Record<ServiceRequest["type"], string> = {
   call_waiter: "Llama al mesero",
@@ -384,9 +398,12 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
   const freeTable = useUpdateTable(businessId);
   const menu = useMenu(businessId);
   const createOrder = useCreateStaffOrder(businessId);
+  const addItems = useAddItemsToOrder(businessId);
+  const updateQty = useUpdateOrderItemQty(businessId);
   const delItem = useDeleteOrderItem(businessId);
   const { show } = useToast();
-  const [cart, setCart] = useState<Record<number, number>>({});
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [pickItem, setPickItem] = useState<MenuItem | null>(null);
   const [tab, setTab] = useState<"resumen" | "pedir">("resumen");
 
   const activeOrder = orders.data?.find((o) => o.table_id === table.id && ACTIVE_ORDER.includes(o.status)) ?? null;
@@ -396,31 +413,37 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
   const detail = useOrderWithItems(businessId, activeOrder?.id ?? null);
   const tableReqs = (requests.data ?? []).filter((r) => r.table_id === table.id && r.status !== "done");
   const items = menu.data?.items ?? [];
-  const cartLines = Object.entries(cart)
-    .map(([id, qty]) => ({ item: items.find((i) => i.id === Number(id))!, qty }))
-    .filter((l) => l.item);
-  const cartTotal = cartLines.reduce((s, l) => s + (Number(l.item.price) || 0) * l.qty, 0);
 
-  const add = (id: number) => setCart((p) => ({ ...p, [id]: (p[id] ?? 0) + 1 }));
-  const sub = (id: number) =>
-    setCart((p) => {
-      const n = (p[id] ?? 0) - 1;
-      const next = { ...p };
-      if (n <= 0) delete next[id];
-      else next[id] = n;
-      return next;
+  const cartCount = (id: number) => cart.filter((l) => l.item.id === id).reduce((s, l) => s + l.qty, 0);
+  const cartTotal = cart.reduce((s, l) => s + lineUnitPrice(l.item, l.optionIds) * l.qty, 0);
+  const sending = createOrder.isPending || addItems.isPending;
+
+  const addLine = (item: MenuItem, qty: number, optionIds: number[]) => {
+    const key = cartKey(item.id, optionIds);
+    setCart((c) => {
+      const i = c.findIndex((l) => l.key === key);
+      if (i >= 0) {
+        const next = [...c];
+        next[i] = { ...next[i], qty: next[i].qty + qty };
+        return next;
+      }
+      return [...c, { key, item, qty, optionIds }];
     });
+  };
+  const setLineQty = (key: string, qty: number) =>
+    setCart((c) => (qty <= 0 ? c.filter((l) => l.key !== key) : c.map((l) => (l.key === key ? { ...l, qty } : l))));
+  // Tap en un ítem: si tiene modificadores, abre el selector; si no, agrega 1.
+  const pick = (item: MenuItem) => (hasModifiers(item) ? setPickItem(item) : addLine(item, 1, []));
 
   async function send() {
-    if (!cartLines.length) return;
+    if (!cart.length) return;
+    const payload = cart.map((l) => ({ menu_item_id: l.item.id, qty: l.qty, modifiers: l.optionIds }));
     try {
-      await createOrder.mutateAsync({
-        table_id: table.id,
-        items: cartLines.map((l) => ({ menu_item_id: l.item.id, qty: l.qty })),
-      });
-      setCart({});
+      if (activeOrder) await addItems.mutateAsync({ orderId: activeOrder.id, items: payload });
+      else await createOrder.mutateAsync({ table_id: table.id, items: payload });
+      setCart([]);
       setTab("resumen");
-      show("Pedido enviado a cocina", "success");
+      show(activeOrder ? "Ítems agregados al pedido" : "Pedido enviado a cocina", "success");
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo enviar el pedido", "error");
     }
@@ -508,32 +531,71 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
               {activeOrder ? (
                 <Card className="glass rounded-2xl p-3">
                   {detail.data?.items?.length ? (
-                    detail.data.items.map((it) => (
-                      <div key={it.id} className="mb-1 flex items-center justify-between gap-2 text-sm">
-                        <span className="min-w-0 flex-1 truncate text-foreground/75">
-                          {it.qty}× {it.name_snapshot}{" "}
-                          <span className="text-foreground/40">({it.status})</span>
-                        </span>
-                        <span className="text-foreground">${(it.price_snapshot * it.qty).toFixed(2)}</span>
-                        <button
-                          type="button"
-                          aria-label={`Quitar ${it.name_snapshot}`}
-                          className="shrink-0 text-foreground/35 transition hover:text-foreground disabled:opacity-40"
-                          disabled={delItem.isPending}
-                          onClick={() =>
-                            delItem.mutate(
-                              { orderId: activeOrder.id, itemId: it.id },
-                              {
-                                onError: (e) => show(e instanceof Error ? e.message : "No se pudo quitar", "error"),
-                                onSuccess: () => show("Ítem quitado del pedido", "success"),
-                              },
-                            )
-                          }
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </div>
-                    ))
+                    detail.data.items.map((it) => {
+                      const mods = modifierLabel(it.modifiers);
+                      const inKitchen = it.status === "preparing" || it.status === "ready";
+                      return (
+                        <div key={it.id} className="mb-2 flex items-start justify-between gap-2 text-sm">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-foreground/85">
+                              {it.name_snapshot}
+                              {it.course ? (
+                                <span className="ml-1 rounded bg-foreground/10 px-1 text-[10px] text-foreground/60">
+                                  {COURSE_LABEL[it.course] ?? it.course}
+                                </span>
+                              ) : null}
+                              {(it.round ?? 1) > 1 ? (
+                                <span className="ml-1 text-[10px] text-foreground/40">R{it.round}</span>
+                              ) : null}
+                            </p>
+                            {mods ? <p className="truncate text-xs text-foreground/50">{mods}</p> : null}
+                            <p className="text-[10px] uppercase tracking-wide text-foreground/40">
+                              {it.fired === false ? "retenido" : it.status}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1 rounded-full border border-foreground/15 px-1 py-0.5">
+                            <button
+                              aria-label="Menos"
+                              disabled={updateQty.isPending}
+                              onClick={() => updateQty.mutate({ orderId: activeOrder.id, itemId: it.id, qty: it.qty - 1 })}
+                              className="grid size-6 place-items-center text-foreground disabled:opacity-40"
+                            >
+                              <Minus className="size-3.5" />
+                            </button>
+                            <span className="w-4 text-center text-foreground">{it.qty}</span>
+                            <button
+                              aria-label="Más"
+                              disabled={updateQty.isPending}
+                              onClick={() => updateQty.mutate({ orderId: activeOrder.id, itemId: it.id, qty: it.qty + 1 })}
+                              className="grid size-6 place-items-center text-foreground disabled:opacity-40"
+                            >
+                              <Plus className="size-3.5" />
+                            </button>
+                          </div>
+                          <span className="w-14 shrink-0 text-right text-foreground">
+                            ${(it.price_snapshot * it.qty).toFixed(2)}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Quitar ${it.name_snapshot}`}
+                            className="shrink-0 text-foreground/35 transition hover:text-foreground disabled:opacity-40"
+                            disabled={delItem.isPending}
+                            onClick={() => {
+                              if (inKitchen && !window.confirm(`"${it.name_snapshot}" ya está en cocina. ¿Quitarlo de todos modos?`)) return;
+                              delItem.mutate(
+                                { orderId: activeOrder.id, itemId: it.id },
+                                {
+                                  onError: (e) => show(e instanceof Error ? e.message : "No se pudo quitar", "error"),
+                                  onSuccess: () => show("Ítem quitado del pedido", "success"),
+                                },
+                              );
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })
                   ) : (
                     <p className="text-sm text-foreground/40">Cargando…</p>
                   )}
@@ -574,45 +636,74 @@ function TableModal({ businessId, table, onClose }: { businessId: number; table:
             </Button>
           </div>
         ) : (
-          <div className="flex flex-col gap-2 pb-20">
+          <div className="flex flex-col gap-2 pb-24">
             {items.length ? (
-              items.map((it) => (
-                <div key={it.id} className="glass flex items-center justify-between rounded-2xl p-3">
-                  <div className="pr-2">
-                    <p className="text-sm font-medium text-foreground">{it.name}</p>
-                    <p className="text-xs text-foreground/55">${Number(it.price).toFixed(2)}</p>
+              items.map((it) => {
+                const n = cartCount(it.id);
+                return (
+                  <div key={it.id} className="glass flex items-center justify-between rounded-2xl p-3">
+                    <div className="min-w-0 pr-2">
+                      <p className="truncate text-sm font-medium text-foreground">{it.name}</p>
+                      <p className="text-xs text-foreground/55">
+                        ${Number(it.price).toFixed(2)}
+                        {hasModifiers(it) ? <span className="ml-1 text-foreground/40">· con opciones</span> : null}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {n > 0 && (
+                        <span className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-bold text-foreground">{n}</span>
+                      )}
+                      <Button isIconOnly size="sm" variant="primary" className="rounded-full" aria-label={`Agregar ${it.name}`} onPress={() => pick(it)}>
+                        <Plus className="size-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {cart[it.id] ? (
-                      <>
-                        <Button isIconOnly size="sm" variant="secondary" className="rounded-full" onPress={() => sub(it.id)}>
-                          −
-                        </Button>
-                        <span className="w-5 text-center text-foreground">{cart[it.id]}</span>
-                      </>
-                    ) : null}
-                    <Button isIconOnly size="sm" variant="primary" className="rounded-full" onPress={() => add(it.id)}>
-                      +
-                    </Button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <p className="text-sm text-foreground/40">Este menú no tiene ítems.</p>
             )}
 
-            {cartLines.length > 0 && (
-              <div className="sticky bottom-0 -mx-5 -mb-5 mt-2 border-t border-foreground/10 bg-surface p-4">
-                <Button variant="primary" size="lg" fullWidth isDisabled={createOrder.isPending} onPress={send}>
-                  {createOrder.isPending ? (
+            {cart.length > 0 && (
+              <div className="sticky bottom-0 -mx-5 -mb-5 mt-2 flex flex-col gap-2 border-t border-foreground/10 bg-surface p-4">
+                <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+                  {cart.map((l) => {
+                    const mods = cartLineModLabel(l.item, l.optionIds);
+                    return (
+                      <div key={l.key} className="flex items-center gap-2 text-sm">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-foreground/85">{l.item.name}</p>
+                          {mods ? <p className="truncate text-xs text-foreground/50">{mods}</p> : null}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1 rounded-full border border-foreground/15 px-1 py-0.5">
+                          <button onClick={() => setLineQty(l.key, l.qty - 1)} aria-label="Menos" className="grid size-6 place-items-center text-foreground">
+                            {l.qty <= 1 ? <Trash2 className="size-3.5" /> : <Minus className="size-3.5" />}
+                          </button>
+                          <span className="w-4 text-center text-foreground">{l.qty}</span>
+                          <button onClick={() => setLineQty(l.key, l.qty + 1)} aria-label="Más" className="grid size-6 place-items-center text-foreground">
+                            <Plus className="size-3.5" />
+                          </button>
+                        </div>
+                        <span className="w-14 shrink-0 text-right text-foreground/80">
+                          ${(lineUnitPrice(l.item, l.optionIds) * l.qty).toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Button variant="primary" size="lg" fullWidth isDisabled={sending} onPress={send}>
+                  {sending ? (
                     <Spinner color="current" size="sm" />
                   ) : (
-                    `Enviar a cocina · $${cartTotal.toFixed(2)}`
+                    `${activeOrder ? "Agregar al pedido" : "Enviar a cocina"} · $${cartTotal.toFixed(2)}`
                   )}
                 </Button>
               </div>
             )}
           </div>
+        )}
+        {pickItem && (
+          <ModifierPicker item={pickItem} onClose={() => setPickItem(null)} onConfirm={(qty, ids) => addLine(pickItem, qty, ids)} />
         )}
       </div>
     </div>

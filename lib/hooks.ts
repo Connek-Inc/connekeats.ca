@@ -653,6 +653,35 @@ export function useDeleteOrderItem(businessId: number) {
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ["order", businessId, v.orderId] });
       qc.invalidateQueries({ queryKey: ["orders", businessId] });
+      qc.invalidateQueries({ queryKey: ["kds", businessId] });
+    },
+  });
+}
+
+// El mesero AGREGA ítems (con modificadores) a una orden ya abierta.
+export function useAddItemsToOrder(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, items }: { orderId: number; items: { menu_item_id: number; qty: number; modifiers: number[] }[] }) =>
+      api.post(`/businesses/${businessId}/orders/${orderId}/items`, items),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["order", businessId, v.orderId] });
+      qc.invalidateQueries({ queryKey: ["orders", businessId] });
+      qc.invalidateQueries({ queryKey: ["kds", businessId] });
+    },
+  });
+}
+
+// El mesero ajusta la cantidad de un ítem (0 = lo elimina).
+export function useUpdateOrderItemQty(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, itemId, qty }: { orderId: number; itemId: number; qty: number }) =>
+      api.patch(`/businesses/${businessId}/orders/${orderId}/items/${itemId}`, { qty }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["order", businessId, v.orderId] });
+      qc.invalidateQueries({ queryKey: ["orders", businessId] });
+      qc.invalidateQueries({ queryKey: ["kds", businessId] });
     },
   });
 }
@@ -715,11 +744,12 @@ export function useMarkBillPaid(businessId: number) {
 export function useCreateStaffOrder(businessId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { table_id: number; items: { menu_item_id: number; qty: number }[] }) =>
+    mutationFn: (body: { table_id: number; items: { menu_item_id: number; qty: number; modifiers?: number[] }[] }) =>
       api.post(`/businesses/${businessId}/orders`, { ...body, channel: "waiter" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["orders", businessId] });
       qc.invalidateQueries({ queryKey: ["tables", businessId] });
+      qc.invalidateQueries({ queryKey: ["kds", businessId] });
     },
   });
 }
