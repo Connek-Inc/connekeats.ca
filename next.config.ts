@@ -5,10 +5,20 @@ import type { NextConfig } from "next";
 // puerto de la web (3100), sin CORS ni un segundo puerto que abrir en el firewall.
 const API_PROXY_TARGET = process.env.API_PROXY_TARGET ?? "http://api:8000";
 
-const nextConfig: NextConfig = {
-  async rewrites() {
-    return [{ source: "/api/:path*", destination: `${API_PROXY_TARGET}/:path*` }];
-  },
-};
+// Build de Tauri (app de escritorio/móvil): export ESTÁTICO embebido. Se activa
+// con TAURI=1. El build normal (VPS) sigue siendo SSR con el proxy /api intacto.
+const isTauri = process.env.TAURI === "1";
+
+const nextConfig: NextConfig = isTauri
+  ? {
+      output: "export", // genera ./out estático para empaquetar dentro de Tauri
+      images: { unoptimized: true }, // sin optimizador de imágenes server en export
+      // sin rewrites: en export el cliente llama al API por URL absoluta (NEXT_PUBLIC_API_URL)
+    }
+  : {
+      async rewrites() {
+        return [{ source: "/api/:path*", destination: `${API_PROXY_TARGET}/:path*` }];
+      },
+    };
 
 export default nextConfig;

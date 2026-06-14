@@ -1,5 +1,9 @@
 import type { MetadataRoute } from "next";
 
+// `force-static` para que sea compatible con el export estático de Tauri
+// (es contenido fijo; en SSR no cambia nada).
+export const dynamic = "force-static";
+
 // PWA manifest (Next lo sirve en /manifest.webmanifest y lo enlaza solo).
 export default function manifest(): MetadataRoute.Manifest {
   return {
