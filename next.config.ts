@@ -13,6 +13,12 @@ const nextConfig: NextConfig = isTauri
   ? {
       output: "export", // genera ./out estático para empaquetar dentro de Tauri
       images: { unoptimized: true }, // sin optimizador de imágenes server en export
+      // cada ruta como carpeta/index.html → todo file-server (incluido el protocolo
+      // del webview de Tauri) resuelve bien "/home" y "/home/" en cargas duras/refresh.
+      trailingSlash: true,
+      // expone el flag al cliente: la app nativa NO registra el service worker
+      // (es innecesario y su intercepción de fetch rompe el protocolo de Tauri).
+      env: { NEXT_PUBLIC_TAURI: "1" },
       // sin rewrites: en export el cliente llama al API por URL absoluta (NEXT_PUBLIC_API_URL)
     }
   : {
