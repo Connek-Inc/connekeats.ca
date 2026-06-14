@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 
 import { ConsentBanner } from "@/components/ConsentBanner";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/lib/toast";
@@ -19,6 +20,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <ToastProvider>
               {children}
               <ConsentBanner />
+              <OfflineIndicator />
             </ToastProvider>
           </AuthProvider>
         </QueryClientProvider>

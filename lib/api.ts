@@ -1,5 +1,6 @@
 // Cliente HTTP contra connek-restaurantes-api (el que ya está en Vercel).
 import { API_URL } from "./config";
+import { outbox, setOutboxSender } from "./outbox";
 import { supabase } from "./supabase";
 
 export class ApiError extends Error {
@@ -12,7 +13,13 @@ export class ApiError extends Error {
   }
 }
 
-type Opts = { method?: string; body?: unknown; token?: string | null };
+type Opts = { method?: string; body?: unknown; token?: string | null; noQueue?: boolean };
+
+// Respuesta que devuelve una escritura encolada (sin red). Las mutaciones la
+// tratan como éxito optimista; el reenvío real ocurre al reconectar.
+export type Queued = { __queued: true };
+export const isQueued = (r: unknown): r is Queued =>
+  !!r && typeof r === "object" && (r as { __queued?: unknown }).__queued === true;
 
 async function request<T>(path: string, opts: Opts = {}): Promise<T> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -25,12 +32,27 @@ async function request<T>(path: string, opts: Opts = {}): Promise<T> {
   }
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method: opts.method ?? "GET",
-    headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-    cache: "no-store",
-  });
+  const method = (opts.method ?? "GET").toUpperCase();
+  const isWrite = method === "POST" || method === "PATCH" || method === "DELETE" || method === "PUT";
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      cache: "no-store",
+    });
+  } catch (e) {
+    // Error de RED (sin conexión / fetch falló). Si es una ESCRITURA, la
+    // encolamos para reenviarla al reconectar (cortes breves). Las lecturas
+    // y el reenvío (noQueue) propagan el error normal.
+    if (isWrite && !opts.noQueue) {
+      outbox.enqueue({ method, path, body: opts.body, token: opts.token ?? null, label: `${method} ${path}` });
+      return { __queued: true } as T;
+    }
+    throw e;
+  }
 
   const text = await res.text();
   const data = text ? safeJson(text) : null;
@@ -81,3 +103,9 @@ export const api = {
   del: <T>(path: string, token?: string | null) => request<T>(path, { method: "DELETE", token }),
   upload,
 };
+
+// Reenviador de la cola offline: reejecuta cada escritura encolada (noQueue
+// evita re-encolar en bucle). Usa la sesión staff actual si no había token explícito.
+setOutboxSender(async (req) => {
+  await request(req.path, { method: req.method, body: req.body, token: req.token, noQueue: true });
+});
