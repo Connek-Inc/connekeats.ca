@@ -10,6 +10,7 @@ import {
   Briefcase,
   Check,
   ChefHat,
+  Clock,
   Cog,
   ConciergeBell,
   Construction,
@@ -631,6 +632,37 @@ function MenuItemRow({ businessId, item, categories }: { businessId: number; ite
               }}
               className="w-16 bg-transparent text-right text-foreground outline-none"
             />
+          </div>
+          {/* Curso de cocina (coursing) */}
+          <select
+            value={item.course ?? ""}
+            onChange={(e) => update.mutate({ itemId: item.id, data: { course: e.target.value } }, onErr)}
+            className="rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1 text-xs text-foreground outline-none"
+            aria-label="Curso de cocina"
+            title="Curso (coursing): entrada → plato fuerte → postre"
+          >
+            <option value="">Sin curso</option>
+            <option value="starter">Entrada</option>
+            <option value="main">Plato fuerte</option>
+            <option value="dessert">Postre</option>
+            <option value="drink">Bebida</option>
+          </select>
+          {/* Tiempo de preparación (min) */}
+          <div className="flex items-center gap-1 text-foreground/60" title="Tiempo de preparación (min)">
+            <Clock className="size-3.5" />
+            <input
+              type="number"
+              min={0}
+              defaultValue={item.prep_minutes ?? 0}
+              onBlur={(e) => {
+                const n = Number(e.target.value);
+                if (!Number.isNaN(n) && n !== (item.prep_minutes ?? 0))
+                  update.mutate({ itemId: item.id, data: { prep_minutes: n } }, onErr);
+              }}
+              className="w-10 bg-transparent text-right text-foreground outline-none"
+              aria-label="Minutos de preparación"
+            />
+            <span className="text-xs">min</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <select

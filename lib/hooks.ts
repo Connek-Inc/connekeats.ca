@@ -246,7 +246,7 @@ export function useCreateMenuItem(businessId: number) {
 }
 
 type MenuItemPatch = Partial<
-  Pick<MenuItem, "name" | "price" | "available" | "description" | "available_in" | "category_id" | "station" | "featured" | "is_alcohol">
+  Pick<MenuItem, "name" | "price" | "available" | "description" | "available_in" | "category_id" | "station" | "featured" | "is_alcohol" | "course" | "prep_minutes">
 >;
 
 export function useUpdateMenuItem(businessId: number) {
@@ -599,6 +599,30 @@ export function useOrderWithItems(businessId: number, orderId: number | null) {
     enabled: !!orderId,
     queryKey: ["order", businessId, orderId],
     queryFn: () => api.get<Order>(`/businesses/${businessId}/orders/${orderId}`),
+  });
+}
+
+// Tablero KDS: órdenes activas con items+modificadores+curso/ronda en UNA lectura.
+export function useKds(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["kds", businessId],
+    queryFn: () => api.get<{ orders: Order[] }>(`/businesses/${businessId}/orders/kds`).then((r) => r.orders),
+    refetchInterval: 10000, // fallback de tiempo real
+  });
+}
+
+// Acción del KDS (la lógica vive en el backend): disparar curso, listo/servido de
+// una ronda o ticket completo, recall.
+export function useKdsAction(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ orderId, action, scope, value }: { orderId: number; action: string; scope?: string; value?: string | number | null }) =>
+      api.post(`/businesses/${businessId}/orders/${orderId}/kds-action`, { action, scope: scope ?? "order", value: value ?? null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kds", businessId] });
+      qc.invalidateQueries({ queryKey: ["orders", businessId] });
+    },
   });
 }
 

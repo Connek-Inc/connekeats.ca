@@ -150,6 +150,8 @@ export type MenuItem = {
   station?: "kitchen" | "bar";
   featured?: boolean; // platillo del día / destacado
   is_alcohol?: boolean; // exige verificación 18+/sobriedad al servir (RACJ)
+  course?: string | null; // curso de cocina (starter/main/dessert/drink)
+  prep_minutes?: number; // tiempo de preparación estimado (min)
   modifier_groups?: ModifierGroup[]; // grupos de modificadores configurados
 };
 
@@ -164,6 +166,10 @@ export type OrderItem = {
   status: OrderItemStatus;
   round?: number; // tanda: 1 = primer pedido, 2 = segunda tanda, etc.
   modifiers?: OrderItemModifier[]; // modificadores elegidos (snapshot)
+  course?: string | null; // curso de cocina (snapshot)
+  prep_minutes?: number; // tiempo de prep estimado (snapshot)
+  fired?: boolean; // false = retenido (coursing) hasta dispararse
+  fired_at?: string | null;
 };
 
 export type Order = {
@@ -173,6 +179,7 @@ export type Order = {
   status: OrderStatus;
   channel: "qr" | "waiter";
   total: number;
+  created_at?: string | null; // para el temporizador del KDS
   items?: OrderItem[];
 };
 
