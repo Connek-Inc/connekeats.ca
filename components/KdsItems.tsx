@@ -6,7 +6,15 @@
 //  - cada ronda lleva su encabezado ("Ronda N"),
 //  - la última ronda con algo pendiente se resalta con "NUEVO".
 
-import type { OrderItem } from "@/lib/types";
+import type { OrderItem, OrderItemModifier } from "@/lib/types";
+
+// Texto corto de los modificadores para la cocina/barra: "sin cebolla · +queso".
+export function modifierLabel(mods?: OrderItemModifier[]): string {
+  if (!mods?.length) return "";
+  return mods
+    .map((m) => (m.kind === "remove" ? `sin ${m.option_name}` : m.option_name))
+    .join(" · ");
+}
 
 const TONE: Record<string, string> = {
   queued: "bg-foreground/[0.04] border-foreground/10",
@@ -60,20 +68,31 @@ export function KdsItems({
                 {!pending && <span className="font-normal normal-case text-foreground/30">· hecho</span>}
               </p>
             )}
-            {its.map((it) => (
-              <button
-                key={it.id}
-                disabled={it.status === "served"}
-                onClick={() => NEXT[it.status] && onAdvance(it, NEXT[it.status])}
-                className={`flex items-center justify-between rounded-2xl border px-3 py-2.5 text-left ${TONE[it.status]}`}
-              >
-                <span className="text-foreground">
-                  {it.qty}× {it.name_snapshot}
-                  {it.notes ? `  · ${it.notes}` : ""}
-                </span>
-                <span className="text-xs text-foreground/50">{it.status}</span>
-              </button>
-            ))}
+            {its.map((it) => {
+              const mods = modifierLabel(it.modifiers);
+              return (
+                <button
+                  key={it.id}
+                  disabled={it.status === "served"}
+                  onClick={() => NEXT[it.status] && onAdvance(it, NEXT[it.status])}
+                  className={`flex items-start justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left ${TONE[it.status]}`}
+                >
+                  <span className="flex flex-col text-foreground">
+                    <span>
+                      {it.qty}× {it.name_snapshot}
+                    </span>
+                    {(mods || it.notes) && (
+                      <span className="text-xs font-medium text-foreground/60">
+                        {mods}
+                        {mods && it.notes ? " · " : ""}
+                        {it.notes ?? ""}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-xs text-foreground/50">{it.status}</span>
+                </button>
+              );
+            })}
           </div>
         );
       })}

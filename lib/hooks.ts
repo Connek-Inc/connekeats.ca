@@ -24,6 +24,7 @@ import type {
   LedgerEntry,
   MenuCategory,
   MenuItem,
+  ModifierGroup,
   OcrResult,
   Order,
   ParkingTicket,
@@ -263,6 +264,95 @@ export function useDeleteMenuItem(businessId: number) {
     mutationFn: (itemId: number) => api.del(`/businesses/${businessId}/menu/items/${itemId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["menu", businessId] }),
   });
+}
+
+// ── Modificadores / ingredientes (config del owner) ─────────────────
+// La lógica de validación y precio vive en el backend; aquí solo CRUD de config.
+export function useItemModifiers(businessId: number, itemId: number | null) {
+  return useQuery({
+    enabled: !!businessId && !!itemId,
+    queryKey: ["modifier-groups", businessId, itemId],
+    queryFn: () =>
+      api
+        .get<{ groups: ModifierGroup[] }>(
+          `/businesses/${businessId}/menu/items/${itemId}/modifier-groups`,
+        )
+        .then((r) => r.groups),
+  });
+}
+
+// Invalida tanto la config del ítem como el menú (que ya trae los grupos).
+function useModifierMutation<TVars>(
+  businessId: number,
+  itemId: number | null,
+  fn: (vars: TVars) => Promise<unknown>,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["modifier-groups", businessId, itemId] });
+      qc.invalidateQueries({ queryKey: ["menu", businessId] });
+    },
+  });
+}
+
+type GroupBody = {
+  name: string;
+  selection: "single" | "multi";
+  min_select: number;
+  max_select: number | null;
+};
+
+export function useCreateModifierGroup(businessId: number, itemId: number) {
+  return useModifierMutation<GroupBody>(businessId, itemId, (body) =>
+    api.post(`/businesses/${businessId}/menu/items/${itemId}/modifier-groups`, body),
+  );
+}
+
+export function useUpdateModifierGroup(businessId: number, itemId: number) {
+  return useModifierMutation<{ groupId: number; data: Partial<GroupBody> }>(
+    businessId,
+    itemId,
+    ({ groupId, data }) => api.patch(`/businesses/${businessId}/menu/modifier-groups/${groupId}`, data),
+  );
+}
+
+export function useDeleteModifierGroup(businessId: number, itemId: number) {
+  return useModifierMutation<number>(businessId, itemId, (groupId) =>
+    api.del(`/businesses/${businessId}/menu/modifier-groups/${groupId}`),
+  );
+}
+
+type OptionBody = {
+  name: string;
+  price_delta: number;
+  is_default: boolean;
+  available: boolean;
+};
+
+export function useCreateModifierOption(businessId: number, itemId: number) {
+  return useModifierMutation<{ groupId: number; data: OptionBody }>(
+    businessId,
+    itemId,
+    ({ groupId, data }) =>
+      api.post(`/businesses/${businessId}/menu/modifier-groups/${groupId}/options`, data),
+  );
+}
+
+export function useUpdateModifierOption(businessId: number, itemId: number) {
+  return useModifierMutation<{ optionId: number; data: Partial<OptionBody> }>(
+    businessId,
+    itemId,
+    ({ optionId, data }) =>
+      api.patch(`/businesses/${businessId}/menu/modifier-options/${optionId}`, data),
+  );
+}
+
+export function useDeleteModifierOption(businessId: number, itemId: number) {
+  return useModifierMutation<number>(businessId, itemId, (optionId) =>
+    api.del(`/businesses/${businessId}/menu/modifier-options/${optionId}`),
+  );
 }
 
 // ── Categorías del menú (las crea el dueño) ─────────────────────────

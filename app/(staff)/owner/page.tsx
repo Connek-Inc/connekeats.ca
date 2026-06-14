@@ -20,6 +20,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  Sliders,
   Star,
   Trash2,
   Type,
@@ -47,10 +48,15 @@ import {
   useCreateCategory,
   useCreateFloor,
   useCreateMenuItem,
+  useCreateModifierGroup,
+  useCreateModifierOption,
   useCreateTable,
   useDeleteCategory,
   useDeleteMenuItem,
+  useDeleteModifierGroup,
+  useDeleteModifierOption,
   useDeleteTable,
+  useItemModifiers,
   useEmployees,
   useFloors,
   useInviteStaff,
@@ -60,6 +66,8 @@ import {
   useTables,
   useUpdateBusiness,
   useUpdateMenuItem,
+  useUpdateModifierGroup,
+  useUpdateModifierOption,
   useUpdateTable,
   useUploadLogo,
   useUploadMenuImage,
@@ -71,7 +79,7 @@ import { MODULES } from "@/lib/modules";
 import { supabase } from "@/lib/supabase";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
-import type { Business, Employee, MenuCategory, MenuItem, TaxComponent } from "@/lib/types";
+import type { Business, Employee, MenuCategory, MenuItem, ModifierGroup, ModifierOption, TaxComponent } from "@/lib/types";
 
 export default function OwnerPage() {
   const { businessId } = useBusiness();
@@ -486,7 +494,9 @@ function MenuItemRow({ businessId, item, categories }: { businessId: number; ite
   const { show } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const vidRef = useRef<HTMLInputElement>(null);
+  const [editMods, setEditMods] = useState(false);
   const onErr = { onError: () => show("No se pudo guardar", "error") };
+  const modCount = item.modifier_groups?.length ?? 0;
 
   const pickImage = (f: File | undefined) => {
     if (!f) return;
@@ -585,6 +595,16 @@ function MenuItemRow({ businessId, item, categories }: { businessId: number; ite
             <Star className={`size-4 ${item.featured ? "fill-amber-400" : ""}`} />
           </button>
           <button
+            type="button"
+            className={`flex shrink-0 items-center gap-0.5 transition ${modCount ? "text-foreground" : "text-foreground/30 hover:text-foreground/60"}`}
+            aria-label={`Modificadores de ${item.name}`}
+            title="Modificadores / ingredientes (quitar, extras, opciones)"
+            onClick={() => setEditMods(true)}
+          >
+            <Sliders className="size-4" />
+            {modCount > 0 && <span className="text-[10px] font-bold">{modCount}</span>}
+          </button>
+          <button
             className="shrink-0 text-foreground/40 transition hover:text-foreground"
             aria-label={`Eliminar ${item.name}`}
             onClick={() => del.mutate(item.id, { onError: () => show("No se pudo eliminar", "error") })}
@@ -643,7 +663,230 @@ function MenuItemRow({ businessId, item, categories }: { businessId: number; ite
           </div>
         </div>
       </div>
+      {editMods && <ModifierEditor businessId={businessId} item={item} onClose={() => setEditMods(false)} />}
     </Card>
+  );
+}
+
+// Editor de modificadores de un ítem (grupos + opciones). La validación y el
+// precio los hace el backend; aquí solo se configura.
+function ModifierEditor({ businessId, item, onClose }: { businessId: number; item: MenuItem; onClose: () => void }) {
+  const groups = useItemModifiers(businessId, item.id);
+  const createGroup = useCreateModifierGroup(businessId, item.id);
+  const { show } = useToast();
+  const onErr = { onError: () => show("No se pudo guardar", "error") };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
+      <div
+        className="glass max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-t-3xl p-5 sm:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-lg font-bold text-foreground">Modificadores</p>
+            <p className="text-xs text-foreground/50">{item.name}</p>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" className="text-foreground/50 hover:text-foreground">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <p className="mb-3 text-xs leading-relaxed text-foreground/55">
+          Crea grupos (ej. «Ingredientes», «Extras», «Tamaño»). En grupos de varias
+          opciones, marca como incluida un ingrediente para que el cliente pueda quitarlo
+          («sin X»). El precio se calcula en el servidor.
+        </p>
+
+        {groups.isLoading ? (
+          <div className="grid place-items-center py-8">
+            <Spinner color="current" />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {(groups.data ?? []).map((g) => (
+              <ModifierGroupCard key={g.id} businessId={businessId} itemId={item.id} group={g} />
+            ))}
+            {(groups.data ?? []).length === 0 && (
+              <p className="text-sm text-foreground/40">Aún no hay grupos de modificadores.</p>
+            )}
+          </div>
+        )}
+
+        <Button
+          variant="secondary"
+          fullWidth
+          className="mt-4"
+          isDisabled={createGroup.isPending}
+          onPress={() =>
+            createGroup.mutate(
+              { name: "Nuevo grupo", selection: "multi", min_select: 0, max_select: null },
+              onErr,
+            )
+          }
+        >
+          <span className="flex items-center justify-center gap-2">
+            <Plus className="size-4" /> Agregar grupo
+          </span>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ModifierGroupCard({
+  businessId,
+  itemId,
+  group,
+}: {
+  businessId: number;
+  itemId: number;
+  group: ModifierGroup;
+}) {
+  const updateGroup = useUpdateModifierGroup(businessId, itemId);
+  const deleteGroup = useDeleteModifierGroup(businessId, itemId);
+  const createOption = useCreateModifierOption(businessId, itemId);
+  const { show } = useToast();
+  const onErr = { onError: () => show("No se pudo guardar", "error") };
+  const patch = (data: Partial<{ name: string; selection: "single" | "multi"; min_select: number; max_select: number | null }>) =>
+    updateGroup.mutate({ groupId: group.id, data }, onErr);
+
+  return (
+    <Card className="glass rounded-2xl p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <input
+          defaultValue={group.name}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v && v !== group.name) patch({ name: v });
+          }}
+          className="min-w-0 flex-1 bg-transparent font-semibold text-foreground outline-none"
+        />
+        <button
+          onClick={() => deleteGroup.mutate(group.id, { onError: () => show("No se pudo eliminar", "error") })}
+          aria-label="Eliminar grupo"
+          className="shrink-0 text-foreground/40 transition hover:text-foreground"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+
+      {/* Reglas del grupo */}
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+        <select
+          value={group.selection}
+          onChange={(e) => patch({ selection: e.target.value as "single" | "multi" })}
+          className="rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1 text-foreground outline-none"
+          aria-label="Tipo de selección"
+        >
+          <option value="multi">Varias opciones</option>
+          <option value="single">Una opción</option>
+        </select>
+        <label className="flex items-center gap-1.5 text-foreground/60">
+          <input
+            type="checkbox"
+            checked={group.min_select >= 1}
+            onChange={(e) => patch({ min_select: e.target.checked ? 1 : 0 })}
+          />
+          Obligatorio
+        </label>
+        {group.selection === "multi" && (
+          <label className="flex items-center gap-1.5 text-foreground/60">
+            Máx
+            <input
+              type="number"
+              min={0}
+              defaultValue={group.max_select ?? 0}
+              onBlur={(e) => {
+                const n = Number(e.target.value);
+                patch({ max_select: n > 0 ? n : null });
+              }}
+              className="w-12 rounded-lg border border-foreground/15 bg-foreground/5 px-1.5 py-1 text-right text-foreground outline-none"
+            />
+          </label>
+        )}
+      </div>
+
+      {/* Opciones */}
+      <div className="flex flex-col gap-1.5">
+        {group.options.map((o) => (
+          <ModifierOptionRow key={o.id} businessId={businessId} itemId={itemId} option={o} />
+        ))}
+      </div>
+
+      <button
+        onClick={() =>
+          createOption.mutate(
+            { groupId: group.id, data: { name: "Nueva opción", price_delta: 0, is_default: false, available: true } },
+            onErr,
+          )
+        }
+        className="mt-2 flex items-center gap-1 text-xs font-medium text-foreground/60 transition hover:text-foreground"
+      >
+        <Plus className="size-3.5" /> Agregar opción
+      </button>
+    </Card>
+  );
+}
+
+function ModifierOptionRow({
+  businessId,
+  itemId,
+  option,
+}: {
+  businessId: number;
+  itemId: number;
+  option: ModifierOption;
+}) {
+  const updateOption = useUpdateModifierOption(businessId, itemId);
+  const deleteOption = useDeleteModifierOption(businessId, itemId);
+  const { show } = useToast();
+  const onErr = { onError: () => show("No se pudo guardar", "error") };
+  const patch = (data: Partial<{ name: string; price_delta: number; is_default: boolean; available: boolean }>) =>
+    updateOption.mutate({ optionId: option.id, data }, onErr);
+
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-foreground/10 px-2 py-1.5">
+      <input
+        defaultValue={option.name}
+        onBlur={(e) => {
+          const v = e.target.value.trim();
+          if (v && v !== option.name) patch({ name: v });
+        }}
+        className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none"
+      />
+      <div className="flex shrink-0 items-center gap-0.5 text-foreground/60">
+        <span className="text-xs">$</span>
+        <input
+          type="number"
+          step="0.5"
+          defaultValue={option.price_delta}
+          onBlur={(e) => {
+            const n = Number(e.target.value);
+            if (!Number.isNaN(n) && n !== option.price_delta) patch({ price_delta: n });
+          }}
+          className="w-14 bg-transparent text-right text-sm text-foreground outline-none"
+          title="Ajuste de precio (+ extra / - descuento)"
+        />
+      </div>
+      <button
+        onClick={() => patch({ is_default: !option.is_default })}
+        title={option.is_default ? "Incluida (clic para quitar)" : "Marcar como incluida (el cliente puede quitarla)"}
+        aria-label="Incluida por defecto"
+        className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold transition ${
+          option.is_default ? "bg-foreground text-background" : "border border-foreground/20 text-foreground/40"
+        }`}
+      >
+        Incl.
+      </button>
+      <button
+        onClick={() => deleteOption.mutate(option.id, { onError: () => show("No se pudo eliminar", "error") })}
+        aria-label="Eliminar opción"
+        className="shrink-0 text-foreground/40 transition hover:text-foreground"
+      >
+        <Trash2 className="size-3.5" />
+      </button>
+    </div>
   );
 }
 

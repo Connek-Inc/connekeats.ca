@@ -2,7 +2,7 @@
 // Experiencia del comensal por QR (web pública, sin login). Opera con el token
 // efímero de mesa contra /diner/*. Construida con HeroUI v3 (dark/glass).
 import { Button, Card, Spinner } from "@heroui/react";
-import { ArrowLeft, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minus, Play, Plus, Printer, Star, Unplug, UtensilsCrossed, Wine } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, CreditCard, Hand, Heart, type LucideIcon, Minus, Play, Plus, Printer, Star, Trash2, Unplug, UtensilsCrossed, Wine } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -15,7 +15,55 @@ import { ensureNotifyPermission, useNotifier } from "@/lib/notify";
 import { TERMS } from "@/lib/termsOfService";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
-import type { DinerSession, MenuCategory, MenuItem, Order } from "@/lib/types";
+import type { DinerSession, MenuCategory, MenuItem, ModifierGroup, Order } from "@/lib/types";
+
+// Línea del carrito: un ítem con un set concreto de opciones (mismo ítem con
+// opciones distintas = líneas distintas).
+type CartLine = { key: string; item: MenuItem; qty: number; optionIds: number[] };
+
+function cartKey(itemId: number, optionIds: number[]): string {
+  return `${itemId}::${[...optionIds].sort((a, b) => a - b).join(",")}`;
+}
+
+// Precio unitario (base + deltas elegidos). SOLO para mostrar; el backend recalcula
+// y es la fuente de verdad. Refleja la misma lógica del servicio:
+//  - multi: opción no-default elegida → +delta; default desmarcado → −delta.
+//  - single: opción elegida → +delta.
+function lineUnitPrice(item: MenuItem, optionIds: number[]): number {
+  const sel = new Set(optionIds);
+  let p = Number(item.price) || 0;
+  for (const g of item.modifier_groups ?? []) {
+    for (const o of g.options) {
+      const on = sel.has(o.id);
+      const d = Number(o.price_delta) || 0;
+      if (g.selection === "multi") {
+        if (on && !o.is_default) p += d;
+        else if (!on && o.is_default) p -= d;
+      } else if (on) {
+        p += d;
+      }
+    }
+  }
+  return Math.round(p * 100) / 100;
+}
+
+// Resumen legible de los modificadores de una línea ("sin cebolla · +queso").
+function cartLineModLabel(item: MenuItem, optionIds: number[]): string {
+  const sel = new Set(optionIds);
+  const parts: string[] = [];
+  for (const g of item.modifier_groups ?? []) {
+    for (const o of g.options) {
+      const on = sel.has(o.id);
+      if (g.selection === "multi") {
+        if (on && !o.is_default) parts.push(o.name);
+        else if (!on && o.is_default) parts.push(`sin ${o.name}`);
+      } else if (on) {
+        parts.push(o.name);
+      }
+    }
+  }
+  return parts.join(" · ");
+}
 
 // ¿La hora local actual está dentro de la ventana [start, end]? end < start
 // significa que cruza la medianoche (p.ej. 08:00→03:00). Sin ventana → true.
@@ -42,7 +90,7 @@ export default function DinerTablePage() {
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [cat, setCat] = useState<number | "all">("all");
   const [detail, setDetail] = useState<MenuItem | null>(null);
-  const [cart, setCart] = useState<Record<number, number>>({});
+  const [cart, setCart] = useState<CartLine[]>([]);
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,29 +159,54 @@ export default function DinerTablePage() {
   // Alcohol sólo dentro del horario de venta del negocio (RACJ). Si no hay
   // ventana configurada, se permite (no rompe negocios sin alcohol).
   const alcoholOk = withinWindow(session?.alcohol_start, session?.alcohol_end);
-  const tryAdd = (id: number, n: number) => {
-    const it = items.find((i) => i.id === id);
-    if (it?.is_alcohol && !alcoholOk) {
+
+  // Cuántas unidades de un ítem hay en el carrito (sumando sus líneas).
+  const cartCount = (itemId: number) =>
+    cart.filter((l) => l.item.id === itemId).reduce((s, l) => s + l.qty, 0);
+
+  // Agrega una línea (mismo ítem + mismas opciones se fusiona; si no, línea nueva).
+  const addLine = (item: MenuItem, qty: number, optionIds: number[]) => {
+    if (item.is_alcohol && !alcoholOk) {
       show(t("diner.alcoholClosed"), "error");
       return;
     }
-    setCart((c) => ({ ...c, [id]: (c[id] ?? 0) + n }));
+    const key = cartKey(item.id, optionIds);
+    setCart((c) => {
+      const i = c.findIndex((l) => l.key === key);
+      if (i >= 0) {
+        const next = [...c];
+        next[i] = { ...next[i], qty: next[i].qty + qty };
+        return next;
+      }
+      return [...c, { key, item, qty, optionIds }];
+    });
   };
-  const add = (id: number) => tryAdd(id, 1);
-  const addQty = (id: number, n: number) => tryAdd(id, n);
 
-  const cartLines = useMemo(
-    () => Object.entries(cart).map(([id, qty]) => ({ item: items.find((i) => i.id === Number(id))!, qty })),
-    [cart, items],
-  );
-  const cartTotal = cartLines.reduce((s, l) => s + (l.item?.price ?? 0) * l.qty, 0);
+  const setLineQty = (key: string, qty: number) =>
+    setCart((c) => (qty <= 0 ? c.filter((l) => l.key !== key) : c.map((l) => (l.key === key ? { ...l, qty } : l))));
+
+  // Tap rápido en el "+": si el ítem tiene modificadores, abre la ficha para
+  // elegirlos; si no, agrega 1 directo.
+  const quickAdd = (item: MenuItem) => {
+    if (item.modifier_groups?.length) {
+      setDetail(item);
+      return;
+    }
+    addLine(item, 1, []);
+  };
+
+  const cartTotal = cart.reduce((s, l) => s + lineUnitPrice(l.item, l.optionIds) * l.qty, 0);
 
   async function sendOrder() {
-    if (!dt || !cartLines.length) return;
+    if (!dt || !cart.length) return;
     setSending(true);
     try {
-      await api.post("/diner/order", cartLines.map((l) => ({ menu_item_id: l.item.id, qty: l.qty })), dt);
-      setCart({});
+      await api.post(
+        "/diner/order",
+        cart.map((l) => ({ menu_item_id: l.item.id, qty: l.qty, modifiers: l.optionIds })),
+        dt,
+      );
+      setCart([]);
       await refreshOrder();
       show(t("toast.orderSent"), "success");
     } catch (e) {
@@ -327,9 +400,9 @@ export default function DinerTablePage() {
               <ItemCard
                 key={`feat-${it.id}`}
                 it={it}
-                qty={cart[it.id] ?? 0}
+                qty={cartCount(it.id)}
                 onOpen={() => setDetail(it)}
-                onAdd={() => add(it.id)}
+                onAdd={() => quickAdd(it)}
               />
             ))}
           </div>
@@ -366,9 +439,9 @@ export default function DinerTablePage() {
                 <ItemCard
                   key={it.id}
                   it={it}
-                  qty={cart[it.id] ?? 0}
+                  qty={cartCount(it.id)}
                   onOpen={() => setDetail(it)}
-                  onAdd={() => add(it.id)}
+                  onAdd={() => quickAdd(it)}
                 />
               ))}
             </div>
@@ -377,8 +450,42 @@ export default function DinerTablePage() {
       )}
 
       {/* Barra de envío flotante */}
-      {cartLines.length > 0 && (
-        <div className="safe-pb fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-xl bg-gradient-to-t from-background via-background/95 to-transparent px-5 pb-1 pt-3">
+      {cart.length > 0 && (
+        <div className="safe-pb fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-xl bg-gradient-to-t from-background via-background/97 to-transparent px-5 pb-1 pt-3">
+          {/* Resumen del carrito (cada línea con sus modificadores) */}
+          <div className="glass mb-2 flex max-h-52 flex-col gap-1.5 overflow-y-auto rounded-3xl p-2">
+            {cart.map((l) => {
+              const mods = cartLineModLabel(l.item, l.optionIds);
+              return (
+                <div key={l.key} className="flex items-center gap-2 rounded-2xl px-2 py-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{l.item.name}</p>
+                    {mods && <p className="truncate text-xs text-foreground/55">{mods}</p>}
+                  </div>
+                  <span className="shrink-0 text-sm text-foreground/70">
+                    ${(lineUnitPrice(l.item, l.optionIds) * l.qty).toFixed(2)}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-foreground/15 px-1.5 py-1">
+                    <button
+                      onClick={() => setLineQty(l.key, l.qty - 1)}
+                      aria-label="Menos"
+                      className="grid size-6 place-items-center rounded-full text-foreground"
+                    >
+                      {l.qty <= 1 ? <Trash2 className="size-3.5" /> : <Minus className="size-3.5" />}
+                    </button>
+                    <span className="w-4 text-center text-sm font-semibold text-foreground">{l.qty}</span>
+                    <button
+                      onClick={() => setLineQty(l.key, l.qty + 1)}
+                      aria-label="Más"
+                      className="grid size-6 place-items-center rounded-full text-foreground"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
           {/* Disclosure de contrato a distancia (Loi sur la protection du consommateur, P-40.1) */}
           <p className="mb-1.5 px-1 text-center text-[10px] leading-tight text-foreground/45">
             {TERMS.disclosure[locale]}{" "}
@@ -400,7 +507,7 @@ export default function DinerTablePage() {
           pairings={pairings}
           onClose={() => setDetail(null)}
           onOpen={(it) => setDetail(it)}
-          onAdd={(n) => addQty(detail.id, n)}
+          onAdd={(n, optionIds) => addLine(detail, n, optionIds)}
         />
       )}
 
@@ -557,7 +664,7 @@ function DishDetail({
   pairings: MenuItem[];
   onClose: () => void;
   onOpen: (it: MenuItem) => void;
-  onAdd: (n: number) => void;
+  onAdd: (n: number, optionIds: number[]) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [fav, setFav] = useState(false);
@@ -565,6 +672,50 @@ function DishDetail({
   const t = useT();
   const desc = item.description ?? "";
   const longDesc = desc.length > 120;
+
+  // ── Modificadores: estado de selección (arranca con los defaults) ──
+  const groups = useMemo<ModifierGroup[]>(() => item.modifier_groups ?? [], [item]);
+  const [selected, setSelected] = useState<Set<number>>(() => {
+    const s = new Set<number>();
+    for (const g of item.modifier_groups ?? []) {
+      if (g.selection === "single") {
+        const def = g.options.find((o) => o.is_default && o.available);
+        if (def) s.add(def.id);
+      } else {
+        for (const o of g.options) if (o.is_default && o.available) s.add(o.id);
+      }
+    }
+    return s;
+  });
+
+  const toggle = (g: ModifierGroup, oid: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (g.selection === "single") {
+        const was = next.has(oid);
+        for (const o of g.options) next.delete(o.id);
+        if (!was) next.add(oid);
+        else if (g.min_select >= 1) next.add(oid); // obligatorio: no dejar vacío
+      } else {
+        if (next.has(oid)) next.delete(oid);
+        else {
+          const n = g.options.filter((o) => next.has(o.id)).length;
+          if (g.max_select != null && n >= g.max_select) return prev; // tope
+          next.add(oid);
+        }
+      }
+      return next;
+    });
+  };
+
+  const groupOk = (g: ModifierGroup) => {
+    const n = g.options.filter((o) => selected.has(o.id)).length;
+    if (g.selection === "single") return g.min_select >= 1 ? n === 1 : n <= 1;
+    return n >= g.min_select && (g.max_select == null || n <= g.max_select);
+  };
+  const valid = groups.every(groupOk);
+  const optionIds = [...selected];
+  const unitPrice = lineUnitPrice(item, optionIds);
 
   return (
     <div className="fixed inset-0 z-[55] overflow-y-auto bg-background pb-28">
@@ -642,6 +793,60 @@ function DishDetail({
             </div>
           </div>
         )}
+
+        {/* Modificadores / ingredientes (el backend valida y precia) */}
+        {groups.length > 0 && (
+          <div className="mt-6 flex flex-col gap-5">
+            {groups.map((g) => {
+              const n = g.options.filter((o) => selected.has(o.id)).length;
+              const req = g.min_select >= 1;
+              return (
+                <div key={g.id}>
+                  <div className="mb-2 flex items-baseline justify-between gap-2">
+                    <p className="text-sm font-bold text-foreground">{g.name}</p>
+                    <span className={`text-[11px] ${req && n < g.min_select ? "font-semibold text-red-500" : "text-foreground/45"}`}>
+                      {req ? t("diner.required") : t("diner.optional")}
+                      {g.selection === "multi" && g.max_select ? ` · ${t("diner.upTo")} ${g.max_select}` : ""}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {g.options
+                      .filter((o) => o.available)
+                      .map((o) => {
+                        const on = selected.has(o.id);
+                        const d = Number(o.price_delta) || 0;
+                        return (
+                          <button
+                            key={o.id}
+                            onClick={() => toggle(g, o.id)}
+                            className={`flex items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left transition ${
+                              on ? "border-foreground bg-foreground/10" : "border-foreground/15"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2.5 text-foreground">
+                              <span
+                                className={`grid size-5 shrink-0 place-items-center border ${
+                                  g.selection === "single" ? "rounded-full" : "rounded-md"
+                                } ${on ? "border-foreground bg-foreground text-background" : "border-foreground/30"}`}
+                              >
+                                {on && <Check className="size-3.5" />}
+                              </span>
+                              {o.name}
+                            </span>
+                            {d !== 0 && (
+                              <span className="shrink-0 text-sm text-foreground/60">
+                                {d > 0 ? "+" : "−"}${Math.abs(d).toFixed(2)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Barra inferior: cantidad + agregar */}
@@ -655,8 +860,17 @@ function DishDetail({
             <Plus className="size-4" />
           </button>
         </div>
-        <Button variant="primary" size="lg" className="flex-1" onPress={() => { onAdd(count); onClose(); }}>
-          {t("common.add")} · ${(Number(item.price) * count).toFixed(2)}
+        <Button
+          variant="primary"
+          size="lg"
+          className="flex-1"
+          isDisabled={!valid}
+          onPress={() => {
+            onAdd(count, optionIds);
+            onClose();
+          }}
+        >
+          {t("common.add")} · ${(unitPrice * count).toFixed(2)}
         </Button>
       </div>
     </div>

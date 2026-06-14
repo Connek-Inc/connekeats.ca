@@ -104,6 +104,38 @@ export type Table = {
 
 export type MenuCategory = { id: number; business_id: number; name: string; sort_order: number };
 
+// ── Modificadores / ingredientes (configurables por ítem) ──
+export type ModifierOption = {
+  id: number;
+  group_id?: number;
+  name: string;
+  price_delta: number; // +extra / -descuento
+  is_default: boolean; // preseleccionada (ingrediente incluido)
+  available: boolean;
+  sort?: number;
+};
+
+export type ModifierGroup = {
+  id: number;
+  menu_item_id?: number;
+  name: string;
+  selection: "single" | "multi"; // una opción (radio) | varias (checkbox)
+  min_select: number; // >=1 → obligatorio
+  max_select: number | null; // tope (solo multi); null = sin tope
+  sort?: number;
+  options: ModifierOption[];
+};
+
+// Modificador ya elegido en una línea del pedido (snapshot).
+export type OrderItemModifier = {
+  id?: number;
+  option_id?: number | null;
+  group_name: string;
+  option_name: string;
+  price_delta: number;
+  kind: "add" | "remove"; // add = extra/elección · remove = "sin X"
+};
+
 export type MenuItem = {
   id: number;
   business_id: number;
@@ -118,6 +150,7 @@ export type MenuItem = {
   station?: "kitchen" | "bar";
   featured?: boolean; // platillo del día / destacado
   is_alcohol?: boolean; // exige verificación 18+/sobriedad al servir (RACJ)
+  modifier_groups?: ModifierGroup[]; // grupos de modificadores configurados
 };
 
 export type OrderItem = {
@@ -125,11 +158,12 @@ export type OrderItem = {
   order_id: number;
   menu_item_id: number | null;
   name_snapshot: string;
-  price_snapshot: number;
+  price_snapshot: number; // ya incluye los deltas de modificadores
   qty: number;
   notes: string | null;
   status: OrderItemStatus;
   round?: number; // tanda: 1 = primer pedido, 2 = segunda tanda, etc.
+  modifiers?: OrderItemModifier[]; // modificadores elegidos (snapshot)
 };
 
 export type Order = {
