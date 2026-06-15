@@ -22,6 +22,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  ShieldCheck,
   Sliders,
   Star,
   Trash2,
@@ -62,6 +63,7 @@ import {
   useEmployees,
   useFloors,
   useInviteStaff,
+  useCompliance,
   useConnectSquare,
   useMenu,
   usePaymentAccount,
@@ -492,6 +494,8 @@ function Menu({ businessId, mode }: { businessId: number; mode: ModeKey }) {
   );
 }
 
+const ALLERGENS = ["gluten", "lácteos", "huevo", "nueces", "maní", "soya", "mariscos", "pescado", "ajonjolí", "mostaza", "sulfitos"];
+
 function MenuItemRow({ businessId, item, categories }: { businessId: number; item: MenuItem; categories: MenuCategory[] }) {
   const update = useUpdateMenuItem(businessId);
   const del = useDeleteMenuItem(businessId);
@@ -698,6 +702,28 @@ function MenuItemRow({ businessId, item, categories }: { businessId: number; ite
               ))}
             </select>
           </div>
+        </div>
+        {/* Alérgenos (se muestran como badges al comensal — MAPAQ/accesibilidad) */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+          <span className="text-[11px] text-foreground/45">Alérgenos:</span>
+          {ALLERGENS.map((a) => {
+            const on = (item.allergens ?? []).includes(a);
+            return (
+              <button
+                key={a}
+                type="button"
+                onClick={() => {
+                  const cur = new Set(item.allergens ?? []);
+                  if (on) cur.delete(a);
+                  else cur.add(a);
+                  update.mutate({ itemId: item.id, data: { allergens: [...cur] } }, onErr);
+                }}
+                className={`rounded-full px-2 py-0.5 text-[11px] transition ${on ? "bg-amber-500/20 font-semibold text-amber-600" : "bg-foreground/5 text-foreground/45 hover:text-foreground"}`}
+              >
+                {a}
+              </button>
+            );
+          })}
         </div>
       </div>
       {editMods && <ModifierEditor businessId={businessId} item={item} onClose={() => setEditMods(false)} />}
@@ -931,7 +957,14 @@ function roleLabel(r: string) {
   return r === "owner" ? "Dueño" : r === "manager" ? "Gerente" : r === "waiter" ? "Mesero" : "Cocina";
 }
 
-type EmpPatch = Partial<Pick<Employee, "name" | "phone" | "position" | "hire_date" | "wage" | "status" | "notes" | "is_tipped">>;
+type EmpPatch = Partial<Pick<Employee, "name" | "phone" | "position" | "hire_date" | "wage" | "status" | "notes" | "is_tipped" | "training_level" | "training_date" | "training_expiry" | "training_cert_url">>;
+
+const TRAINING_LEVELS: [string, string][] = [
+  ["", "Sin formación"],
+  ["gestionnaire_12h", "Gestionnaire (12 h)"],
+  ["manipulateur_6h", "Manipulateur (6 h)"],
+  ["sensibilisation_3h30", "Sensibilisation (3 h 30)"],
+];
 
 // Salario mínimo de Québec (1-may-2026): general vs con propina (à pourboire).
 const QC_MIN_WAGE = 16.6;
@@ -1005,6 +1038,20 @@ function MemberProfile({
         Mínimo legal QC: <span className="font-semibold text-foreground/60">${floor.toFixed(2)}/h</span> {isTipped ? "(con propina)" : "(general)"}.
         {belowFloor && <span className="font-semibold text-amber-500"> ⚠ El pago está por debajo del mínimo.</span>}
       </p>
+
+      {/* Formación de higiene MAPAQ */}
+      <div className="mt-1 grid grid-cols-2 gap-2 border-t border-foreground/10 pt-2">
+        <label className="col-span-2 text-[11px] uppercase tracking-wide text-foreground/45">Formación de higiene (MAPAQ)</label>
+        <select
+          value={emp?.training_level ?? ""}
+          onChange={(e) => onSave({ training_level: e.target.value || null })}
+          className="rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1.5 text-sm text-foreground outline-none"
+          aria-label="Nivel de formación"
+        >
+          {TRAINING_LEVELS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <ProfileField label="Vence atestación" type="date" defaultValue={emp?.training_expiry ?? ""} onSave={(v) => onSave({ training_expiry: v || null })} />
+      </div>
     </div>
   );
 }
@@ -1233,6 +1280,155 @@ const PROVINCE_LABEL: Record<string, string> = {
 };
 
 // Impuestos canadienses por COMPONENTES (Québec = GST + QST en líneas separadas).
+const BUSINESS_TYPES: [string, string][] = [
+  ["restaurant", "Restaurante"],
+  ["bar", "Bar"],
+  ["retail", "Venta al detalle (épicerie/dépanneur)"],
+  ["traiteur", "Traiteur (catering)"],
+  ["food_truck", "Camión de comida"],
+  ["home_kitchen", "Cocina casera / pequeña producción"],
+];
+const MAPAQ_TYPES: [string, string][] = [
+  ["restauration", "Restauration"],
+  ["vente_detail", "Vente au détail"],
+  ["preparation", "Préparation"],
+];
+const CHECK_TONE: Record<string, string> = {
+  ok: "bg-emerald-500",
+  warn: "bg-amber-500",
+  missing: "bg-red-500",
+  na: "bg-foreground/20",
+};
+
+// Cumplimiento alimentario QC (MAPAQ) + identidad regulatoria + checklist semáforo.
+// La plataforma captura/valida/recuerda; obtener permisos y formaciones es del operador.
+function ComplianceSettings({ business }: { business: Business }) {
+  const update = useUpdateBusiness(business.id);
+  const compliance = useCompliance(business.id);
+  const { show } = useToast();
+  const [f, setF] = useState({
+    business_type: business.business_type ?? "",
+    mapaq_permit_no: business.mapaq_permit_no ?? "",
+    mapaq_permit_type: business.mapaq_permit_type ?? "",
+    mapaq_permit_expiry: business.mapaq_permit_expiry ?? "",
+    mapaq_permit_posted: !!business.mapaq_permit_posted,
+    neq: business.neq ?? "",
+    cnesst_number: business.cnesst_number ?? "",
+    tps_number: business.tps_number ?? "",
+    tvq_number: business.tvq_number ?? "",
+    liquor_permit_expiry: business.liquor_permit_expiry ?? "",
+  });
+  useEffect(() => {
+    setF({
+      business_type: business.business_type ?? "",
+      mapaq_permit_no: business.mapaq_permit_no ?? "",
+      mapaq_permit_type: business.mapaq_permit_type ?? "",
+      mapaq_permit_expiry: business.mapaq_permit_expiry ?? "",
+      mapaq_permit_posted: !!business.mapaq_permit_posted,
+      neq: business.neq ?? "",
+      cnesst_number: business.cnesst_number ?? "",
+      tps_number: business.tps_number ?? "",
+      tvq_number: business.tvq_number ?? "",
+      liquor_permit_expiry: business.liquor_permit_expiry ?? "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business.id]);
+
+  const inputCls = "rounded-lg border border-foreground/15 bg-foreground/5 px-2.5 py-1.5 text-sm text-foreground outline-none";
+  const set = (k: keyof typeof f, v: string | boolean) => setF((p) => ({ ...p, [k]: v }));
+  const save = () =>
+    update.mutate(
+      {
+        business_type: f.business_type,
+        mapaq_permit_no: f.mapaq_permit_no,
+        mapaq_permit_type: f.mapaq_permit_type,
+        mapaq_permit_expiry: f.mapaq_permit_expiry,
+        mapaq_permit_posted: f.mapaq_permit_posted,
+        neq: f.neq,
+        cnesst_number: f.cnesst_number,
+        tps_number: f.tps_number,
+        tvq_number: f.tvq_number,
+        liquor_permit_expiry: f.liquor_permit_expiry,
+      },
+      {
+        onSuccess: () => show("Cumplimiento guardado", "success"),
+        onError: () => show("No se pudo guardar", "error"),
+      },
+    );
+
+  const st = compliance.data;
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-foreground/10 p-3">
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/70">
+          <ShieldCheck className="size-4" /> Cumplimiento (MAPAQ + fiscal)
+        </label>
+        {st && (
+          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${st.score >= 80 ? "bg-emerald-500/15 text-emerald-600" : st.score >= 50 ? "bg-amber-500/15 text-amber-600" : "bg-red-500/15 text-red-600"}`}>
+            {st.score}% en regla
+          </span>
+        )}
+      </div>
+
+      {/* Checklist semáforo (lo arma el backend) */}
+      {st && st.items.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-xl bg-foreground/[0.03] p-2.5">
+          {st.items.map((it) => (
+            <div key={it.key} className="flex items-start gap-2 text-sm">
+              <span className={`mt-1.5 size-2 shrink-0 rounded-full ${CHECK_TONE[it.status] ?? "bg-foreground/20"}`} />
+              <span className="min-w-0 flex-1">
+                <span className={it.status === "na" ? "text-foreground/40" : "text-foreground/80"}>{it.label}</span>
+                {it.detail ? <span className="block text-xs text-foreground/50">{it.detail}</span> : null}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <select value={f.business_type} onChange={(e) => set("business_type", e.target.value)} className={`w-full ${inputCls}`} aria-label="Tipo de establecimiento">
+        <option value="">— Tipo de establecimiento —</option>
+        {BUSINESS_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+
+      <div className="grid grid-cols-2 gap-2">
+        <input value={f.mapaq_permit_no} onChange={(e) => set("mapaq_permit_no", e.target.value)} placeholder="N° permiso MAPAQ" className={inputCls} />
+        <select value={f.mapaq_permit_type} onChange={(e) => set("mapaq_permit_type", e.target.value)} className={inputCls} aria-label="Tipo de permiso MAPAQ">
+          <option value="">Tipo de permiso</option>
+          {MAPAQ_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <label className="flex flex-col gap-0.5 text-[11px] text-foreground/50">
+          Vence permiso MAPAQ
+          <input type="date" value={f.mapaq_permit_expiry?.slice(0, 10) ?? ""} onChange={(e) => set("mapaq_permit_expiry", e.target.value)} className={inputCls} />
+        </label>
+        <label className="flex items-center gap-2 self-end pb-1 text-sm text-foreground/70">
+          <input type="checkbox" checked={f.mapaq_permit_posted} onChange={(e) => set("mapaq_permit_posted", e.target.checked)} /> Exhibido en sitio
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <input value={f.neq} onChange={(e) => set("neq", e.target.value)} placeholder="NEQ" className={inputCls} />
+        <input value={f.cnesst_number} onChange={(e) => set("cnesst_number", e.target.value)} placeholder="N° CNESST" className={inputCls} />
+        <input value={f.tps_number} onChange={(e) => set("tps_number", e.target.value)} placeholder="N° TPS (GST)" className={inputCls} />
+        <input value={f.tvq_number} onChange={(e) => set("tvq_number", e.target.value)} placeholder="N° TVQ (QST)" className={inputCls} />
+      </div>
+
+      {business.liquor_category && (
+        <label className="flex flex-col gap-0.5 text-[11px] text-foreground/50">
+          Vence permiso RACJ (alcohol)
+          <input type="date" value={f.liquor_permit_expiry?.slice(0, 10) ?? ""} onChange={(e) => set("liquor_permit_expiry", e.target.value)} className={inputCls} />
+        </label>
+      )}
+
+      <p className="text-[11px] text-foreground/40">
+        La plataforma captura y te recuerda; obtener el permiso y hacer las formaciones es responsabilidad del negocio. No es asesoría legal.
+      </p>
+      <Button variant="secondary" isDisabled={update.isPending} onPress={save}>
+        Guardar cumplimiento
+      </Button>
+    </div>
+  );
+}
+
 function TaxSettings({ business }: { business: Business }) {
   const update = useUpdateBusiness(business.id);
   const { show } = useToast();
@@ -1582,6 +1778,9 @@ function Settings({ business }: { business: Business }) {
 
       {/* Impuestos (Canadá): GST/HST/QST/PST por componentes */}
       <TaxSettings business={business} />
+
+      {/* Cumplimiento alimentario (MAPAQ) + identidad regulatoria + checklist */}
+      <ComplianceSettings business={business} />
 
       {/* Alcohol (Québec RACJ): permiso del negocio */}
       <LiquorSettings business={business} />

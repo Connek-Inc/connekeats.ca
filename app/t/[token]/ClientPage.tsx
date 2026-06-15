@@ -644,6 +644,13 @@ function ItemCard({
       <div className="flex flex-1 flex-col p-3">
         <span className="line-clamp-2 font-semibold leading-tight text-foreground">{it.name}</span>
         {it.description ? <span className="mt-0.5 line-clamp-1 text-xs text-foreground/45">{it.description}</span> : null}
+        {it.allergens && it.allergens.length > 0 ? (
+          <span className="mt-1 flex flex-wrap gap-1">
+            {it.allergens.map((a) => (
+              <span key={a} className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">{a}</span>
+            ))}
+          </span>
+        ) : null}
         <span className="mt-1 font-bold text-foreground">${Number(it.price).toFixed(2)}</span>
       </div>
     </button>

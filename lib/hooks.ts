@@ -28,6 +28,8 @@ import type {
   OcrResult,
   Order,
   ParkingTicket,
+  PaymentAccount,
+  PaymentConfig,
   Review,
   SalesSummary,
   SeedRequestInput,
@@ -88,8 +90,52 @@ export function useUpdateBusiness(businessId: number) {
       brand_fg?: string;
       brand_base?: string;
       brand_font?: string;
+      // Cumplimiento (MAPAQ) + identidad regulatoria
+      business_type?: string;
+      mapaq_permit_no?: string;
+      mapaq_permit_type?: string;
+      mapaq_permit_issued?: string;
+      mapaq_permit_expiry?: string;
+      mapaq_permit_posted?: boolean;
+      activity_code?: string;
+      neq?: string;
+      cnesst_number?: string;
+      tps_number?: string;
+      tvq_number?: string;
+      liquor_permit_expiry?: string;
     }) => api.patch<Business>(`/businesses/${businessId}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["businesses"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["businesses"] });
+      qc.invalidateQueries({ queryKey: ["compliance", businessId] });
+    },
+  });
+}
+
+// Checklist de cumplimiento (semáforo) — la lógica la arma el backend.
+export function useCompliance(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["compliance", businessId],
+    queryFn: () => api.get<import("./types").ComplianceStatus>(`/businesses/${businessId}/compliance`),
+  });
+}
+
+// Bitácora de temperaturas (cadena de frío).
+export function useTemperatureLogs(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["temperature-logs", businessId],
+    queryFn: () =>
+      api.get<{ logs: import("./types").TemperatureLog[] }>(`/businesses/${businessId}/compliance/temperature-logs`).then((r) => r.logs),
+  });
+}
+
+export function useAddTemperature(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { unit_label: string; temp_c: number; note?: string | null }) =>
+      api.post(`/businesses/${businessId}/compliance/temperature-logs`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["temperature-logs", businessId] }),
   });
 }
 
@@ -246,7 +292,7 @@ export function useCreateMenuItem(businessId: number) {
 }
 
 type MenuItemPatch = Partial<
-  Pick<MenuItem, "name" | "price" | "available" | "description" | "available_in" | "category_id" | "station" | "featured" | "is_alcohol" | "course" | "prep_minutes">
+  Pick<MenuItem, "name" | "price" | "available" | "description" | "available_in" | "category_id" | "station" | "featured" | "is_alcohol" | "course" | "prep_minutes" | "allergens">
 >;
 
 export function useUpdateMenuItem(businessId: number) {
@@ -829,6 +875,225 @@ export function useBillDetail(businessId: number, billId: number | null) {
   });
 }
 
+// ── Config del cobro con tarjeta (Square) por negocio ──
+// Entorno (sandbox=demo | producción) + app id + location id para el SDK.
+// Sin secretos. El front la usa para decidir si muestra el formulario de tarjeta.
+export function usePaymentConfig(businessId: number | null | undefined) {
+  return useQuery({
+    queryKey: ["payment-config", businessId],
+    queryFn: () => api.get<PaymentConfig>(`/businesses/${businessId}/payments/config`),
+    enabled: !!businessId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Variante para el comensal (QR): usa el token efímero de mesa.
+export function useDinerPaymentConfig(businessId: number | null | undefined, token: string | null) {
+  return useQuery({
+    queryKey: ["payment-config-diner", businessId],
+    queryFn: () => api.get<PaymentConfig>(`/businesses/${businessId}/payments/config`, token ?? undefined),
+    enabled: !!businessId && !!token,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// ── Cuenta Square del negocio (Setup): estado + conectar (OAuth) + cambio ──
+export function usePaymentAccount(businessId: number | null | undefined) {
+  return useQuery({
+    queryKey: ["payment-account", businessId],
+    queryFn: () => api.get<PaymentAccount>(`/businesses/${businessId}/payments/account`),
+    enabled: !!businessId,
+  });
+}
+
+// Devuelve la URL de OAuth (autenticada); el componente redirige a ella.
+export function useConnectSquare(businessId: number) {
+  return useMutation({
+    mutationFn: () => api.get<{ url: string }>(`/businesses/${businessId}/payments/connect/square`),
+  });
+}
+
+export function useRequestAccountChange(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) =>
+      api.post<{ ok: boolean; message?: string }>(
+        `/businesses/${businessId}/payments/account/change-request`,
+        { reason },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["payment-account", businessId] }),
+  });
+}
+
+// ── Cobro con tarjeta (Square) ──
+export type ChargeResult = {
+  ok: boolean;
+  status: string;
+  payment_id?: string;
+  receipt_url?: string;
+  paid: number;
+  remaining: number;
+  done: boolean;
+  error?: string;
+};
+
+// Mesero (CobroPanel): usa el JWT del staff.
+export function useChargeCard(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      billId,
+      amount,
+      sourceId,
+      tip,
+      note,
+      idempotencyKey,
+    }: {
+      billId: number;
+      amount: number;
+      sourceId: string;
+      tip?: number;
+      note?: string;
+      idempotencyKey?: string;
+    }) =>
+      api.post<ChargeResult>(`/businesses/${businessId}/payments/charge`, {
+        bill_id: billId,
+        amount,
+        source_id: sourceId,
+        tip: tip ?? 0,
+        note: note ?? null,
+        idempotency_key: idempotencyKey ?? null,
+      }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["bill", businessId, v.billId] });
+      qc.invalidateQueries({ queryKey: ["bills", businessId] });
+      qc.invalidateQueries({ queryKey: ["tables", businessId] });
+      qc.invalidateQueries({ queryKey: ["orders", businessId] });
+    },
+  });
+}
+
+// Comensal (QR): usa el token efímero de mesa (3er arg de api.post).
+export function useDinerChargeCard() {
+  return useMutation({
+    mutationFn: ({
+      token,
+      businessId,
+      billId,
+      amount,
+      sourceId,
+      tip,
+      idempotencyKey,
+    }: {
+      token: string;
+      businessId: number;
+      billId: number;
+      amount: number;
+      sourceId: string;
+      tip?: number;
+      idempotencyKey?: string;
+    }) =>
+      api.post<ChargeResult>(
+        `/businesses/${businessId}/payments/charge`,
+        {
+          bill_id: billId,
+          amount,
+          source_id: sourceId,
+          tip: tip ?? 0,
+          idempotency_key: idempotencyKey ?? null,
+        },
+        token,
+      ),
+  });
+}
+
+// ── Conciliación de pagos Square (historial detallado + totales + payouts) ──
+export type PaymentTxn = {
+  id: number;
+  square_payment_id: string;
+  status: string | null;
+  gross: number;
+  tip: number;
+  processing_fee: number;
+  app_fee: number;
+  net: number;
+  card_brand: string | null;
+  card_last4: string | null;
+  receipt_url: string | null;
+  paid_at: string | null;
+  currency: string;
+  square_payout_id: string | null;
+};
+
+export type PaymentSummary = {
+  count: number;
+  completed: number;
+  currency: string;
+  gross: number;
+  tip: number;
+  processing_fee: number;
+  app_fee: number;
+  net: number;
+  by_status: Record<string, number>;
+};
+
+export type Payout = {
+  id: number;
+  square_payout_id: string;
+  status: string | null;
+  amount: number;
+  currency: string;
+  arrival_date: string | null;
+  destination_type: string | null;
+  destination_last4: string | null;
+};
+
+function payQs(params: Record<string, string | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v) as [string, string][];
+  return entries.length ? "?" + entries.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&") : "";
+}
+
+export function usePaymentSummary(businessId: number, begin?: string, end?: string) {
+  return useQuery({
+    queryKey: ["pay-summary", businessId, begin, end],
+    queryFn: () =>
+      api.get<PaymentSummary>(`/businesses/${businessId}/payments/summary${payQs({ begin, end })}`),
+  });
+}
+
+export function usePaymentTransactions(businessId: number, begin?: string, end?: string) {
+  return useQuery({
+    queryKey: ["pay-transactions", businessId, begin, end],
+    queryFn: () =>
+      api
+        .get<{ transactions: PaymentTxn[] }>(
+          `/businesses/${businessId}/payments/transactions${payQs({ begin, end })}`,
+        )
+        .then((r) => r.transactions),
+  });
+}
+
+export function usePayouts(businessId: number) {
+  return useQuery({
+    queryKey: ["payouts", businessId],
+    queryFn: () =>
+      api.get<{ payouts: Payout[] }>(`/businesses/${businessId}/payments/payouts`).then((r) => r.payouts),
+  });
+}
+
+export function useSyncPayments(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ begin, end }: { begin?: string; end?: string } = {}) =>
+      api.post<{ ok: boolean }>(`/businesses/${businessId}/payments/sync${payQs({ begin, end })}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pay-summary", businessId] });
+      qc.invalidateQueries({ queryKey: ["pay-transactions", businessId] });
+      qc.invalidateQueries({ queryKey: ["payouts", businessId] });
+    },
+  });
+}
+
 export function useAddPayment(businessId: number) {
   const qc = useQueryClient();
   return useMutation({
@@ -1155,8 +1420,15 @@ export function useUpsertEmployee(businessId: number) {
       status?: "active" | "inactive";
       notes?: string | null;
       is_tipped?: boolean;
+      training_level?: string | null;
+      training_date?: string | null;
+      training_expiry?: string | null;
+      training_cert_url?: string | null;
     }) => api.post<Employee>(`/businesses/${businessId}/employees`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["employees", businessId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["employees", businessId] });
+      qc.invalidateQueries({ queryKey: ["compliance", businessId] });
+    },
   });
 }
 

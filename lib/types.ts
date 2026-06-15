@@ -31,6 +31,11 @@ export type Employee = {
   status: "active" | "inactive";
   notes: string | null;
   is_tipped?: boolean; // empleado à pourboire (QC) → salario mínimo con propina
+  // Formación de higiene MAPAQ
+  training_level?: string | null; // gestionnaire_12h | manipulateur_6h | sensibilisation_3h30 | none
+  training_date?: string | null;
+  training_expiry?: string | null;
+  training_cert_url?: string | null;
 };
 
 export type TaxComponent = { name: string; rate: number; number?: string | null };
@@ -61,7 +66,24 @@ export type Business = {
   brand_fg?: string | null;
   brand_base?: "light" | "dark" | null;
   brand_font?: string | null;
+  // Cumplimiento (MAPAQ) + identidad regulatoria
+  business_type?: string | null; // restaurant|bar|retail|traiteur|food_truck|home_kitchen
+  mapaq_permit_no?: string | null;
+  mapaq_permit_type?: string | null;
+  mapaq_permit_issued?: string | null;
+  mapaq_permit_expiry?: string | null;
+  mapaq_permit_posted?: boolean | null;
+  activity_code?: string | null;
+  neq?: string | null;
+  cnesst_number?: string | null;
+  tps_number?: string | null;
+  tvq_number?: string | null;
+  liquor_permit_expiry?: string | null;
 };
+
+export type ChecklistItem = { key: string; label: string; status: "ok" | "warn" | "missing" | "na"; detail?: string };
+export type ComplianceStatus = { business_type?: string | null; score: number; items: ChecklistItem[] };
+export type TemperatureLog = { id: number; business_id: number; unit_label: string; temp_c: number; note?: string | null; recorded_by?: string | null; recorded_at: string };
 
 export type InvoiceItem = { name_snapshot: string; qty: number; price_snapshot: number };
 export type Invoice = {
@@ -152,6 +174,7 @@ export type MenuItem = {
   is_alcohol?: boolean; // exige verificación 18+/sobriedad al servir (RACJ)
   course?: string | null; // curso de cocina (starter/main/dessert/drink)
   prep_minutes?: number; // tiempo de preparación estimado (min)
+  allergens?: string[]; // alérgenos declarados (gluten, nueces, lácteos…)
   modifier_groups?: ModifierGroup[]; // grupos de modificadores configurados
 };
 
@@ -481,6 +504,29 @@ export type FiscalAuditEntry = {
   new_value: unknown;
   fiscal_status: string | null;
   user_id: string | null;
+};
+
+// ── Estado de la cuenta Square del negocio (sin tokens) ──
+export type PaymentAccount = {
+  connected: boolean;
+  status: string; // pending | active | change_requested | suspended
+  locked: boolean;
+  provider: string;
+  square_merchant_id: string | null;
+  square_location_id: string | null;
+  app_fee_bps: number;
+  connected_at: string | null;
+};
+
+// ── Config pública del cobro con tarjeta (Square) por negocio ──
+// La entrega GET /businesses/{id}/payments/config. environment = 'sandbox'
+// (demo, dinero falso) | 'production'. enabled=false → cae al cobro manual.
+export type PaymentConfig = {
+  enabled: boolean;
+  environment: "sandbox" | "production" | string;
+  application_id: string;
+  location_id: string;
+  currency: string;
 };
 
 // ── Seed / onboarding (espejo de database/models.py SeedRequest) ──
