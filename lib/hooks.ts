@@ -120,6 +120,43 @@ export function useCompliance(businessId: number | null) {
   });
 }
 
+// ── Privacidad (Loi 25): incidentes + solicitudes de derechos ──
+export function usePrivacyIncidents(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["privacy-incidents", businessId],
+    queryFn: () =>
+      api.get<{ incidents: import("./types").PrivacyIncident[] }>(`/businesses/${businessId}/privacy/incidents`).then((r) => r.incidents),
+  });
+}
+
+export function useCreateIncident(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { description: string; occurred_at?: string; data_affected?: string; risk_level?: string; actions?: string; cai_notified?: boolean; status?: string }) =>
+      api.post(`/businesses/${businessId}/privacy/incidents`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["privacy-incidents", businessId] }),
+  });
+}
+
+export function usePrivacyRequests(businessId: number | null) {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["privacy-requests", businessId],
+    queryFn: () =>
+      api.get<{ requests: import("./types").PrivacyRequest[] }>(`/businesses/${businessId}/privacy/requests`).then((r) => r.requests),
+  });
+}
+
+export function useResolvePrivacyRequest(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requestId, status }: { requestId: number; status: "fulfilled" | "denied" }) =>
+      api.patch(`/businesses/${businessId}/privacy/requests/${requestId}`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["privacy-requests", businessId] }),
+  });
+}
+
 // Bitácora de temperaturas (cadena de frío).
 export function useTemperatureLogs(businessId: number | null) {
   return useQuery({

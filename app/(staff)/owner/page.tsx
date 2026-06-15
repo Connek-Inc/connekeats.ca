@@ -65,7 +65,11 @@ import {
   useInviteStaff,
   useCompliance,
   useConnectSquare,
+  useCreateIncident,
   useMenu,
+  usePrivacyIncidents,
+  usePrivacyRequests,
+  useResolvePrivacyRequest,
   usePaymentAccount,
   usePaymentConfig,
   useRemoveStaff,
@@ -1429,6 +1433,100 @@ function ComplianceSettings({ business }: { business: Business }) {
   );
 }
 
+// Privacidad (Loi 25): solicitudes de acceso/borrado del titular + registro de
+// incidentes/brechas (con aviso a la CAI). La plataforma registra; el negocio atiende.
+function PrivacyPanel({ business }: { business: Business }) {
+  const requests = usePrivacyRequests(business.id);
+  const resolve = useResolvePrivacyRequest(business.id);
+  const incidents = usePrivacyIncidents(business.id);
+  const createIncident = useCreateIncident(business.id);
+  const { show } = useToast();
+  const [desc, setDesc] = useState("");
+  const [risk, setRisk] = useState("low");
+  const pending = (requests.data ?? []).filter((r) => r.status === "pending");
+  const inputCls = "rounded-lg border border-foreground/15 bg-foreground/5 px-2.5 py-1.5 text-sm text-foreground outline-none";
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-foreground/10 p-3">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/70">
+        <ShieldCheck className="size-4" /> Privacidad (Loi 25)
+      </label>
+
+      {/* Solicitudes de derechos */}
+      <div>
+        <p className="mb-1 text-[11px] uppercase tracking-wide text-foreground/45">
+          Solicitudes de datos {pending.length > 0 && <span className="text-amber-600">· {pending.length} pendiente(s)</span>}
+        </p>
+        {(requests.data ?? []).length === 0 ? (
+          <p className="text-xs text-foreground/40">Sin solicitudes.</p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {(requests.data ?? []).slice(0, 8).map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-1.5 text-sm">
+                <span className="min-w-0 truncate text-foreground/80">
+                  {r.kind === "delete" ? "🗑 Borrar" : "📄 Acceso"} · {r.contact}
+                </span>
+                {r.status === "pending" ? (
+                  <span className="flex shrink-0 gap-1">
+                    <button onClick={() => resolve.mutate({ requestId: r.id, status: "fulfilled" })} className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">Cumplida</button>
+                    <button onClick={() => resolve.mutate({ requestId: r.id, status: "denied" })} className="rounded-full bg-foreground/10 px-2 py-0.5 text-[11px] text-foreground/60">Denegar</button>
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-[11px] text-foreground/40">{r.status}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Registro de incidentes */}
+      <div>
+        <p className="mb-1 text-[11px] uppercase tracking-wide text-foreground/45">Registro de incidentes</p>
+        <div className="flex flex-col gap-1.5">
+          <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Describe el incidente de datos…" rows={2} className={inputCls} />
+          <div className="flex items-center gap-2">
+            <select value={risk} onChange={(e) => setRisk(e.target.value)} className={inputCls} aria-label="Riesgo">
+              <option value="low">Riesgo bajo</option>
+              <option value="medium">Riesgo medio</option>
+              <option value="high">Riesgo alto</option>
+            </select>
+            <Button
+              size="sm"
+              variant="secondary"
+              isDisabled={createIncident.isPending || !desc.trim()}
+              onPress={() =>
+                createIncident.mutate(
+                  { description: desc.trim(), risk_level: risk, occurred_at: new Date().toISOString().slice(0, 10) },
+                  { onSuccess: () => { setDesc(""); show("Incidente registrado", "success"); }, onError: () => show("No se pudo registrar", "error") },
+                )
+              }
+            >
+              Registrar
+            </Button>
+          </div>
+        </div>
+        {(incidents.data ?? []).length > 0 && (
+          <div className="mt-2 flex flex-col gap-1">
+            {(incidents.data ?? []).slice(0, 5).map((i) => (
+              <div key={i.id} className="flex items-start gap-2 text-xs">
+                <span className={`mt-1 size-2 shrink-0 rounded-full ${i.risk_level === "high" ? "bg-red-500" : i.risk_level === "medium" ? "bg-amber-500" : "bg-foreground/30"}`} />
+                <span className="min-w-0 flex-1 text-foreground/70">
+                  {i.occurred_at ? `${i.occurred_at} · ` : ""}{i.description}
+                  {i.risk_level === "high" && !i.cai_notified && <span className="ml-1 font-semibold text-red-500">⚠ avisar a la CAI ≤ pronto</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-[11px] text-foreground/40">
+        Si una brecha tiene riesgo de perjuicio serio, debes notificar a la <b>CAI</b> y a las personas afectadas. No es asesoría legal.
+      </p>
+    </div>
+  );
+}
+
 function TaxSettings({ business }: { business: Business }) {
   const update = useUpdateBusiness(business.id);
   const { show } = useToast();
@@ -1781,6 +1879,9 @@ function Settings({ business }: { business: Business }) {
 
       {/* Cumplimiento alimentario (MAPAQ) + identidad regulatoria + checklist */}
       <ComplianceSettings business={business} />
+
+      {/* Privacidad (Loi 25): solicitudes de derechos + registro de incidentes */}
+      <PrivacyPanel business={business} />
 
       {/* Alcohol (Québec RACJ): permiso del negocio */}
       <LiquorSettings business={business} />

@@ -96,6 +96,7 @@ export default function DinerTablePage() {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [beacon, setBeacon] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewSent, setReviewSent] = useState(false);
@@ -230,6 +231,17 @@ export default function DinerTablePage() {
     }
   }
 
+  async function submitPrivacy(kind: "access" | "delete", contact: string) {
+    if (!dt || !contact.trim()) return;
+    try {
+      await api.post("/diner/privacy-request", { kind, contact: contact.trim() }, dt);
+      show(kind === "delete" ? "Solicitud de borrado enviada" : "Solicitud de acceso enviada", "success");
+      setPrivacyOpen(false);
+    } catch (e) {
+      show(e instanceof Error ? e.message : "No se pudo enviar", "error");
+    }
+  }
+
   async function requestBill() {
     if (!dt) return;
     try {
@@ -306,6 +318,12 @@ export default function DinerTablePage() {
             >
               <Printer className="size-3.5" aria-hidden /> {t("diner.printMenu")}
             </a>
+            <button
+              onClick={() => setPrivacyOpen(true)}
+              className="rounded-full border border-foreground/15 px-2.5 py-1 text-xs text-foreground/60 transition hover:text-foreground"
+            >
+              Mes données
+            </button>
             <LangSwitcher />
           </div>
         </div>
@@ -516,6 +534,9 @@ export default function DinerTablePage() {
         />
       )}
 
+      {/* Privacidad (Loi 25): el comensal pide acceso o borrado de sus datos */}
+      {privacyOpen && <DinerPrivacyModal onClose={() => setPrivacyOpen(false)} onSubmit={submitPrivacy} />}
+
       {/* Beacon full-screen: el comensal lo levanta y el mesero lo ubica por color */}
       {beacon && (
         <div
@@ -659,6 +680,39 @@ function ItemCard({
         <span className="mt-1 font-bold text-foreground">${Number(it.price).toFixed(2)}</span>
       </div>
     </button>
+  );
+}
+
+// Loi 25: el comensal solicita acceso o borrado de sus datos. La solicitud queda
+// registrada y el negocio (responsable) la atiende.
+function DinerPrivacyModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (kind: "access" | "delete", contact: string) => void }) {
+  const [contact, setContact] = useState("");
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 sm:items-center" onClick={onClose}>
+      <div className="w-full max-w-md rounded-t-3xl bg-surface p-5 sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-foreground">Mes données · Loi 25</h3>
+        <p className="mt-1 text-sm text-foreground/55">
+          Pide una copia de tus datos o su eliminación. El establecimiento (responsable) te contactará.
+        </p>
+        <input
+          value={contact}
+          onChange={(e) => setContact(e.target.value)}
+          placeholder="Tu email o teléfono"
+          className="mt-3 w-full rounded-xl border border-foreground/15 bg-foreground/5 px-3 py-2 text-foreground outline-none"
+        />
+        <div className="mt-4 flex gap-2">
+          <button disabled={!contact.trim()} onClick={() => onSubmit("access", contact)} className="flex-1 rounded-full bg-foreground px-3 py-2.5 text-sm font-bold text-background disabled:opacity-40">
+            Pedir mis datos
+          </button>
+          <button disabled={!contact.trim()} onClick={() => onSubmit("delete", contact)} className="flex-1 rounded-full border border-red-500/40 px-3 py-2.5 text-sm font-semibold text-red-500 disabled:opacity-40">
+            Borrar mis datos
+          </button>
+        </div>
+        <button onClick={onClose} className="mt-3 w-full text-center text-xs text-foreground/45">
+          Cancelar
+        </button>
+      </div>
+    </div>
   );
 }
 

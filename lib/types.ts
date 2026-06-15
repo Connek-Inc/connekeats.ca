@@ -81,6 +81,9 @@ export type Business = {
   liquor_permit_expiry?: string | null;
 };
 
+export type PrivacyRequest = { id: number; business_id: number | null; contact: string; kind: string; status: string; note?: string | null; created_at: string; resolved_at?: string | null };
+export type PrivacyIncident = { id: number; business_id: number; occurred_at?: string | null; description: string; data_affected?: string | null; risk_level: string; actions?: string | null; cai_notified: boolean; status: string; created_at: string };
+
 export type ChecklistItem = { key: string; label: string; status: "ok" | "warn" | "missing" | "na"; detail?: string };
 export type ComplianceStatus = { business_type?: string | null; score: number; items: ChecklistItem[] };
 export type TemperatureLog = { id: number; business_id: number; unit_label: string; temp_c: number; note?: string | null; recorded_by?: string | null; recorded_at: string };
