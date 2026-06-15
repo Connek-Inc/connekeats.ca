@@ -377,6 +377,7 @@ export type DinerSession = {
   sells_alcohol?: boolean;
   alcohol_start?: string | null;
   alcohol_end?: string | null;
+  liquor_permit?: string | null; // nº permiso RACJ (mostrar en el menú si vende)
 };
 
 // ── Contabilidad: libro (ingresos/egresos manuales) + reporte por periodo ──

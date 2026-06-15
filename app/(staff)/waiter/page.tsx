@@ -31,6 +31,7 @@ import { ensureNotifyPermission, useNotifier } from "@/lib/notify";
 import {
   useAckRequest,
   useAddItemsToOrder,
+  useAlcoholVerify,
   useBills,
   useBusinesses,
   useCreateStaffOrder,
@@ -132,6 +133,7 @@ export default function WaiterPage() {
   const ack = useAckRequest(businessId!);
   const markPaid = useMarkBillPaid(businessId!);
   const setOrderStatus = useSetOrderStatus(businessId!);
+  const alcoholVerify = useAlcoholVerify(businessId!);
   const { show } = useToast();
   const [selected, setSelected] = useState<number | null>(null);
   const [onlyMyZone, setOnlyMyZone] = useState(true);
@@ -323,13 +325,16 @@ export default function WaiterPage() {
                     size="sm"
                     isDisabled={setOrderStatus.isPending}
                     onPress={() => {
-                      if (
-                        sellsAlcohol &&
-                        !window.confirm(
-                          "Si esta mesa pidió alcohol, ¿verificaste que sea 18+ y que no esté en estado de ebriedad? (responsabilidad RACJ)",
+                      if (sellsAlcohol) {
+                        if (
+                          !window.confirm(
+                            "Si esta mesa pidió alcohol, ¿verificaste que sea 18+ y que no esté en estado de ebriedad? (responsabilidad RACJ)",
+                          )
                         )
-                      )
-                        return;
+                          return;
+                        // Deja rastro RACJ de quién verificó + cuándo (auditoría).
+                        alcoholVerify.mutate({ orderId: o.id, note: "ok" });
+                      }
                       setOrderStatus.mutate(
                         { orderId: o.id, status: "served" },
                         {

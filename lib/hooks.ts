@@ -685,6 +685,14 @@ export function useSetOrderPriority(businessId: number) {
   });
 }
 
+// Registro RACJ: el mesero confirma 18+/sobriedad al servir alcohol (queda rastro).
+export function useAlcoholVerify(businessId: number) {
+  return useMutation({
+    mutationFn: ({ orderId, note }: { orderId: number; note?: string }) =>
+      api.post(`/businesses/${businessId}/orders/${orderId}/alcohol-verify`, { note: note ?? "ok" }),
+  });
+}
+
 // 86/agotado: la cocina oculta/reactiva un ítem del menú del comensal.
 export function useToggleItemAvailability(businessId: number) {
   const qc = useQueryClient();
@@ -835,17 +843,20 @@ export function useCheckoutTable(businessId: number) {
       paymentMethod,
       discount = 0,
       tip = 0,
+      serviceCharge = 0,
     }: {
       tableId: number;
       paymentMethod?: string;
       discount?: number;
       tip?: number;
+      serviceCharge?: number;
     }) =>
       api.post<{ ok: boolean; bill_id: number }>(`/businesses/${businessId}/bills/checkout`, {
         table_id: tableId,
         payment_method: paymentMethod ?? null,
         discount,
         tip,
+        service_charge: serviceCharge,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bills", businessId] });

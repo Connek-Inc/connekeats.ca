@@ -6,9 +6,10 @@
 import { Button, Card, Spinner } from "@heroui/react";
 import { Banknote, CheckCircle2, CreditCard, FileText, Landmark, type LucideIcon, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { useAddPayment, useBillDetail, useBusinesses, useCheckoutMulti, useCheckoutTable, useOpenBill } from "@/lib/hooks";
+import { SquareCardForm } from "@/components/SquareCardForm";
+import { useAckRequest, useAddPayment, useBillDetail, useBusinesses, useChargeCard, useCheckoutMulti, useCheckoutTable, useOpenBill, usePaymentConfig, useServiceRequests } from "@/lib/hooks";
 import { tableColor } from "@/lib/tableColor";
 import { useToast } from "@/lib/toast";
 
@@ -59,15 +60,41 @@ export function CobroPanel({
   const router = useRouter();
   const [mode, setMode] = useState<"full" | "split" | "multi">("full");
   // Tras confirmar el pago → estado "pagado" con botón manual "Emitir factura".
-  const [paid, setPaid] = useState<{ billId: number | null; total: number } | null>(null);
+  const [paid, setPaid] = useState<{ billId: number | null; total: number; receiptUrl?: string | null } | null>(null);
 
   const checkout = useCheckoutTable(businessId);
   const openBill = useOpenBill(businessId);
   const addPayment = useAddPayment(businessId);
   const checkoutMulti = useCheckoutMulti(businessId);
+  const charge = useChargeCard(businessId);
+  // Avisos "pide la cuenta": al cobrar la mesa los marcamos hechos (handoff limpio).
+  const requests = useServiceRequests(businessId);
+  const ackReq = useAckRequest(businessId);
+  // Config de cobro con tarjeta por negocio (entorno sandbox/demo vs producción).
+  const payCfg = usePaymentConfig(businessId);
+  const sqEnabled = Boolean(payCfg.data?.enabled);
+  const isDemo = payCfg.data?.environment === "sandbox";
+  // Cobro real con tarjeta (Square): cuenta abierta + monto a cobrar.
+  const [sq, setSq] = useState<{ billId: number; amount: number } | null>(null);
 
-  // ── Toda la mesa: descuento + propina + impuesto ──
+  // Al confirmarse el pago de la mesa → cerrar el aviso "pide la cuenta" (si lo hubo)
+  // y MOSTRAR la factura automáticamente (si la cuenta tiene id).
+  useEffect(() => {
+    if (!paid) return;
+    (requests.data ?? [])
+      .filter((r) => r.table_id === tableId && r.type === "request_bill" && r.status !== "done")
+      .forEach((r) => ackReq.mutate({ id: r.id, action: "done" }));
+    // Factura imprimible: si el pago fue con tarjeta, el recibo lo genera SQUARE
+    // (su receipt_url). Si no hay recibo Square (efectivo/transferencia), cae a la
+    // factura propia. La factura fiscal QC se genera igual en segundo plano.
+    if (paid.receiptUrl) window.location.href = paid.receiptUrl;
+    else if (paid.billId) router.push(`/factura/${paid.billId}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paid]);
+
+  // ── Toda la mesa: descuento + frais de service + propina + impuesto ──
   const [discount, setDiscount] = useState("");
+  const [serviceCharge, setServiceCharge] = useState("");
   const [tip, setTip] = useState("");
   const businesses = useBusinesses();
   const biz = businesses.data?.find((b) => b.id === businessId);
@@ -76,17 +103,54 @@ export function CobroPanel({
   const round2 = (n: number) => Math.round((n + 1e-9) * 100) / 100; // half-up (paridad con Decimal del backend)
   const taxRateSum = taxComps.reduce((s, c) => s + Number(c.rate), 0);
   const grossFactor = addsTax ? 1 + taxRateSum / 100 : 1; // para gross-up de "por ítem" / "varias mesas"
-  const baseAfterDisc = Math.max(0, orderTotal - (Number(discount) || 0));
+  // El frais de service es gravable → entra a la base; la propina NO se grava.
+  const baseAfterDisc = Math.max(0, orderTotal - (Number(discount) || 0)) + (Number(serviceCharge) || 0);
   const taxLines = addsTax
     ? taxComps.map((c) => ({ name: c.name, rate: c.rate, amount: round2((baseAfterDisc * Number(c.rate)) / 100) }))
     : [];
   const taxTotal = round2(taxLines.reduce((s, l) => s + l.amount, 0));
   const fullTotal = round2(baseAfterDisc + taxTotal + (Number(tip) || 0));
   async function cobrarFull(method: string) {
+    // Tarjeta + Square activo → cobro REAL (abre el formulario de tarjeta).
+    if (method === "card" && sqEnabled) {
+      return startCardCharge();
+    }
     try {
-      const r = await checkout.mutateAsync({ tableId, paymentMethod: method, discount: Number(discount) || 0, tip: Number(tip) || 0 });
+      const r = await checkout.mutateAsync({ tableId, paymentMethod: method, discount: Number(discount) || 0, tip: Number(tip) || 0, serviceCharge: Number(serviceCharge) || 0 });
       show(`Mesa cobrada · ${money(fullTotal)}`, "success");
       setPaid({ billId: r?.bill_id ?? null, total: fullTotal });
+    } catch (e) {
+      show(e instanceof Error ? e.message : "No se pudo cobrar", "error");
+    }
+  }
+
+  // Abre/asegura la cuenta para obtener un bill_id y muestra el formulario Square.
+  // (El cobro con tarjeta v1 cobra el TOTAL de la cuenta + propina; el descuento
+  //  del panel aún no aplica a tarjeta.)
+  async function startCardCharge() {
+    try {
+      const d = await openBill.mutateAsync(tableId);
+      // Monto a cobrar: el remaining del bill (ya sincronizado con la orden viva);
+      // si por alguna razón viene en 0, cae al total del bill y luego a la orden.
+      const amt = Number(d.remaining) || Number(d.bill?.total) || Number(orderTotal) || 0;
+      setSq({ billId: d.bill.id, amount: amt });
+    } catch {
+      show("No se pudo abrir la cuenta", "error");
+    }
+  }
+
+  async function onCardToken(sourceId: string) {
+    if (!sq) return;
+    const t = Number(tip) || 0;
+    try {
+      const r = await charge.mutateAsync({ billId: sq.billId, amount: sq.amount, sourceId, tip: t, idempotencyKey: crypto.randomUUID() });
+      if (r.ok) {
+        show(`Mesa cobrada con tarjeta · ${money(sq.amount + t)}`, "success");
+        setSq(null);
+        setPaid({ billId: sq.billId, total: sq.amount + t, receiptUrl: r.receipt_url ?? null });
+      } else {
+        show(r.error ?? "Pago rechazado", "error");
+      }
     } catch (e) {
       show(e instanceof Error ? e.message : "No se pudo cobrar", "error");
     }
@@ -183,6 +247,11 @@ export function CobroPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      {isDemo && (
+        <div className="rounded-xl bg-amber-500/15 px-3 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-amber-600">
+          Modo demo · pagos de prueba (dinero falso)
+        </div>
+      )}
       <div className="flex gap-1.5">
         <TabBtn k="full" label="Toda la mesa" />
         <TabBtn k="split" label="Dividir" />
@@ -209,6 +278,17 @@ export function CobroPanel({
               </span>
             </label>
             <label className="flex items-center justify-between gap-2">
+              <span className="text-foreground/60">Servicio <span className="text-foreground/35">(frais)</span></span>
+              <span className="flex items-center gap-1">
+                {[10, 15].map((p) => (
+                  <button key={p} type="button" onClick={() => setServiceCharge(((orderTotal * p) / 100).toFixed(2))} className="rounded-full border border-foreground/15 px-2 py-0.5 text-[11px] text-foreground/60">
+                    {p}%
+                  </button>
+                ))}
+                <input type="number" inputMode="decimal" value={serviceCharge} onChange={(e) => setServiceCharge(e.target.value)} placeholder="0" className="w-20 rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1 text-right text-foreground outline-none" />
+              </span>
+            </label>
+            <label className="flex items-center justify-between gap-2">
               <span className="text-foreground/60">Propina</span>
               <span className="flex items-center gap-1">
                 {[10, 15, 20].map((p) => (
@@ -230,7 +310,19 @@ export function CobroPanel({
               <span>{money(fullTotal)}</span>
             </div>
           </div>
-          <Pay pending={checkout.isPending} onPay={cobrarFull} />
+          {sq && payCfg.data ? (
+            <SquareCardForm
+              amountLabel={money(sq.amount + (Number(tip) || 0))}
+              submitting={charge.isPending}
+              onToken={onCardToken}
+              onCancel={() => setSq(null)}
+              appId={payCfg.data.application_id}
+              locationId={payCfg.data.location_id}
+              environment={payCfg.data.environment}
+            />
+          ) : (
+            <Pay pending={checkout.isPending || openBill.isPending} onPay={cobrarFull} />
+          )}
         </div>
       )}
 

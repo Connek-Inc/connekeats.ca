@@ -316,6 +316,11 @@ export default function DinerTablePage() {
             {color.name}
           </span>
         </div>
+        {session.sells_alcohol && session.liquor_permit ? (
+          <p className="mt-1.5 flex items-center gap-1 text-[11px] text-foreground/40">
+            <Wine className="size-3" /> Permis d&apos;alcool: {session.liquor_permit}
+          </p>
+        ) : null}
       </header>
 
       {/* Beacon: levanta el teléfono y el mesero te ubica por tu color */}
