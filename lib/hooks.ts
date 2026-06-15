@@ -120,6 +120,43 @@ export function useCompliance(businessId: number | null) {
   });
 }
 
+// ── Nómina (datos): turnos + reporte de horas/propinas 8% ──
+export function usePayrollReport(businessId: number | null, dateFrom?: string, dateTo?: string) {
+  const qs = new URLSearchParams();
+  if (dateFrom) qs.set("date_from", dateFrom);
+  if (dateTo) qs.set("date_to", dateTo);
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["payroll-report", businessId, dateFrom, dateTo],
+    queryFn: () => api.get<{
+      hours_by_employee: { employee_email: string; hours: number }[];
+      tips: { sales_pretax: number; declared_tips: number; eight_percent_floor: number; attribution_gap: number };
+      note: string;
+    }>(`/businesses/${businessId}/payroll/report?${qs.toString()}`),
+  });
+}
+
+export function useClock(businessId: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, action }: { email: string; action: "clock-in" | "clock-out" }) =>
+      api.post(`/businesses/${businessId}/payroll/${action}`, { employee_email: email }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["payroll-report", businessId] }),
+  });
+}
+
+// ── Remesa fiscal (TVQ/TPS recaudada por período) ──
+export function useTaxRemittance(businessId: number | null, range = "month") {
+  return useQuery({
+    enabled: !!businessId,
+    queryKey: ["tax-remittance", businessId, range],
+    queryFn: () => api.get<{
+      sales_pretax: number; tax_total: number; components: { name: string; amount: number }[];
+      platform_commission: number; note: string;
+    }>(`/businesses/${businessId}/reports/tax-remittance?range=${range}`),
+  });
+}
+
 // ── Privacidad (Loi 25): incidentes + solicitudes de derechos ──
 export function usePrivacyIncidents(businessId: number | null) {
   return useQuery({
