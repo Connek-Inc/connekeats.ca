@@ -14,6 +14,7 @@ import {
   Cog,
   ConciergeBell,
   Construction,
+  CreditCard,
   FileText,
   ImagePlus,
   type LucideIcon,
@@ -61,8 +62,12 @@ import {
   useEmployees,
   useFloors,
   useInviteStaff,
+  useConnectSquare,
   useMenu,
+  usePaymentAccount,
+  usePaymentConfig,
   useRemoveStaff,
+  useRequestAccountChange,
   useStaff,
   useTables,
   useUpdateBusiness,
@@ -1262,6 +1267,17 @@ function TaxSettings({ business }: { business: Business }) {
   const totalRate = comps.reduce((s, c) => s + (Number(c.rate) || 0), 0);
   const inputCls = "rounded-lg border border-foreground/15 bg-foreground/5 px-2 py-1.5 text-sm text-foreground outline-none";
 
+  // Validación suave de nº de registro: GST 9 díg.(+RT0001), QST 10 díg.(+TQ0001).
+  const taxNumLooksValid = (n: string) => {
+    const v = (n || "").replace(/\s/g, "").toUpperCase();
+    if (!v) return true; // vacío = no se valida
+    return /^\d{9}(RT\d{4})?$/.test(v) || /^\d{10}(TQ\d{4})?$/.test(v) || /^\d{9,15}$/.test(v);
+  };
+  // Un bar en QC debe cobrar TVQ/QST desde la 1ª venta (sin umbral).
+  const isBarQc = (business.liquor_category === "bar") && (province === "QC" || business.province === "QC");
+  const hasQst = comps.some((c) => /tvq|qst/i.test(c.name || ""));
+  const barNeedsTvq = isBarQc && !hasQst;
+
   return (
     <div className="flex flex-col gap-3">
       <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/70">
@@ -1285,7 +1301,7 @@ function TaxSettings({ business }: { business: Business }) {
               <input type="number" step="0.001" value={c.rate} onChange={(e) => setComp(i, { rate: Number(e.target.value) })} className={`w-16 text-right ${inputCls}`} aria-label="Tasa %" />
               <span className="text-foreground/50">%</span>
             </span>
-            <input value={c.number ?? ""} onChange={(e) => setComp(i, { number: e.target.value })} placeholder="N° de registro" className={`min-w-0 flex-1 ${inputCls}`} aria-label="Número de registro" />
+            <input value={c.number ?? ""} onChange={(e) => setComp(i, { number: e.target.value })} placeholder="N° de registro" className={`min-w-0 flex-1 ${inputCls} ${taxNumLooksValid(c.number ?? "") ? "" : "border-amber-500/60"}`} aria-label="Número de registro" />
             <button type="button" onClick={() => setComps((cs) => cs.filter((_, j) => j !== i))} aria-label="Quitar impuesto" className="shrink-0 text-foreground/40 transition hover:text-foreground">
               <Trash2 className="size-4" />
             </button>
@@ -1295,6 +1311,15 @@ function TaxSettings({ business }: { business: Business }) {
           + Añadir impuesto
         </button>
       </div>
+
+      {barNeedsTvq && (
+        <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-600">
+          ⚠️ Un bar en Québec debe cobrar <b>TVQ (9.975%)</b> desde la primera venta (sin umbral). Añade el componente QST.
+        </p>
+      )}
+      {comps.some((c) => !taxNumLooksValid(c.number ?? "")) && (
+        <p className="text-[11px] text-amber-600">El nº de registro no parece tener el formato canadiense (GST: 9 díg. +RT0001 · QST: 10 díg. +TQ0001).</p>
+      )}
 
       <label className="flex items-center gap-2">
         <Toggle on={inclusive} onToggle={() => setInclusive((v) => !v)} label="Los precios incluyen impuesto" />
@@ -1379,6 +1404,90 @@ function LiquorSettings({ business }: { business: Business }) {
       <Button variant="secondary" isDisabled={update.isPending} onPress={save}>
         Guardar
       </Button>
+    </div>
+  );
+}
+
+// Pagos con tarjeta (Square): estado por negocio + conectar la cuenta propia.
+// Demo (sandbox) = automático por la plataforma; producción = OAuth del comercio.
+function SquareSettings({ business }: { business: Business }) {
+  const { show } = useToast();
+  const cfg = usePaymentConfig(business.id);
+  const acct = usePaymentAccount(business.id);
+  const connect = useConnectSquare(business.id);
+  const change = useRequestAccountChange(business.id);
+  const isDemo = cfg.data?.environment === "sandbox";
+  const connected = Boolean(acct.data?.connected);
+
+  const onConnect = async () => {
+    try {
+      const r = await connect.mutateAsync();
+      if (r.url) window.location.href = r.url;
+      else show("No se obtuvo la URL de Square", "error");
+    } catch (e) {
+      show(e instanceof Error ? e.message : "Producción de Square aún no está configurada", "error");
+    }
+  };
+  const onRequestChange = async () => {
+    const reason = window.prompt("Motivo para cambiar tu cuenta de cobro:");
+    if (!reason) return;
+    try {
+      const r = await change.mutateAsync(reason);
+      show(r.message ?? "Solicitud enviada", "success");
+    } catch (e) {
+      show(e instanceof Error ? e.message : "No se pudo enviar la solicitud", "error");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-foreground/70">
+        <CreditCard className="size-4" /> Pagos con tarjeta (Square)
+      </label>
+      {cfg.isLoading ? (
+        <Spinner color="current" size="sm" />
+      ) : isDemo ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+          <p className="font-semibold text-amber-600">Modo demo (sandbox)</p>
+          <p className="mt-1 text-[13px] text-foreground/60">
+            Los cobros con tarjeta son de <b>prueba</b> (dinero falso), para mostrar la función a un cliente.
+            No necesitas conectar tu cuenta: la maneja la plataforma. Para cobrar de verdad, este negocio
+            debe pasar a producción y conectar tu Square.
+          </p>
+        </div>
+      ) : connected ? (
+        <div className="rounded-xl border border-foreground/15 bg-foreground/[0.03] p-3 text-sm">
+          <p className="flex items-center gap-1.5 font-medium text-foreground">
+            <Check className="size-4" /> Cuenta Square conectada
+          </p>
+          <p className="mt-1 text-[12px] text-foreground/55">
+            Comercio {acct.data?.square_merchant_id ?? "—"} · Local {acct.data?.square_location_id ?? "—"}
+            {acct.data?.locked ? " · 🔒 bloqueada" : ""}
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="mt-2 rounded-lg"
+            isDisabled={change.isPending}
+            onPress={onRequestChange}
+          >
+            Solicitar cambio de cuenta
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <p className="text-[13px] text-foreground/55">
+            Conecta tu cuenta de Square para cobrar con tarjeta. Square te pedirá autorizar; tus
+            credenciales nunca pasan por nosotros (las guarda Square).
+          </p>
+          <Button variant="primary" isDisabled={connect.isPending} onPress={onConnect}>
+            {connect.isPending ? <Spinner color="current" size="sm" /> : "Conectar mi cuenta Square"}
+          </Button>
+          <p className="text-[11px] text-foreground/40">
+            Mientras no conectes Square, el cobro con tarjeta cae al registro manual (efectivo/tarjeta/transferencia).
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1476,6 +1585,9 @@ function Settings({ business }: { business: Business }) {
 
       {/* Alcohol (Québec RACJ): permiso del negocio */}
       <LiquorSettings business={business} />
+
+      {/* Pagos con tarjeta (Square): demo/sandbox o conectar cuenta propia */}
+      <SquareSettings business={business} />
 
       {/* Tipo de negocio */}
       <div className="flex flex-col gap-1.5">
